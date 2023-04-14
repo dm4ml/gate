@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "gate"
+version = "0.1.0"
+description = "Data validation tool for machine learning pipelines."
+authors = ["Shreya Shankar <shreyashankar@berkeley.edu>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "gate"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+numpy = "^1.24.2"
+pandas = "^2.0.0"
+scikit-learn = "^1.2.2"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.3.1"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
