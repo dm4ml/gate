@@ -45,6 +45,17 @@ class Summary(object):
     def window(self) -> int:
         return self._window
 
+    @property
+    def statistics(self) -> typing.List[str]:
+        return [
+            "coverage",
+            "mean",
+            "stdev",
+            "num_unique_values",
+            "occurrence_ratio",
+            "num_frequent_values",
+        ]
+
     @classmethod
     def fromRaw(
         cls,

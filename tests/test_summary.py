@@ -53,8 +53,3 @@ def test_summarize(tiny_df):
     )
 
     assert expected_result.equals(summary)
-
-
-def test_hello(medium_df):
-    print(medium_df)
-    assert False
