@@ -2,7 +2,8 @@
 
 TODO:
 
-- [ ] Write clustering algorithm
+- [x] Write clustering algorithm
+- [ ] Enable clustering in drill down
 - [ ] Write tests that should fail
 - [ ] Documentation
 - [ ] Add github actions
