@@ -61,3 +61,17 @@ def test_drift(df_with_drift):
 
     assert drift_results.drifted_columns().index.values[0] == "int_col"
     assert drift_results.drifted_columns()["z-score"].abs().values[0] > 2.0
+
+
+def test_hello(df_with_drift):
+    columns = df_with_drift.columns.tolist()
+    columns.remove("date")
+    summary = summarize(
+        df_with_drift,
+        partition_column="date",
+        columns=columns,
+    )
+
+    drift_results = detect_drift(summary[-1], summary[:-1], cluster=True)
+
+    assert False

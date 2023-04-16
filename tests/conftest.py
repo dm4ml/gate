@@ -78,21 +78,74 @@ def df_with_drift():
             int_col = np.random.randint(low=0, high=10, size=10000)
             float_col = np.random.normal(loc=0, scale=1, size=10000)
             string_col = np.random.choice(["A", "B", "C"], size=10000)
+
+            date_data = {"date": date}
+            date_data = pd.DataFrame(
+                {
+                    "date": [date] * len(int_col),
+                    "int_col": int_col,
+                    "float_col": float_col,
+                    "string_col": string_col,
+                    "int_col_2": np.random.randint(
+                        low=10, high=20, size=10000
+                    ),
+                    "float_col_2": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "float_col_3": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "float_col_4": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "string_col_2": np.random.choice(
+                        ["D", "B", "C"], size=10000
+                    ),
+                    "string_col_3": np.random.choice(
+                        ["E", "B", "C"], size=10000
+                    ),
+                    "string_col_4": np.random.choice(
+                        ["F", "B", "C"], size=10000
+                    ),
+                }
+            )
+            df_elems.append(date_data)
         else:
             int_col = np.random.randint(low=10, high=20, size=10000)
             float_col = np.random.normal(loc=1, scale=2, size=10000)
             string_col = np.random.choice(["D", "B", "C"], size=10000)
 
-        date_data = {"date": date}
-        date_data = pd.DataFrame(
-            {
-                "date": [date] * len(int_col),
-                "int_col": int_col,
-                "float_col": float_col,
-                "string_col": string_col,
-            }
-        )
-        df_elems.append(date_data)
+            date_data = {"date": date}
+            date_data = pd.DataFrame(
+                {
+                    "date": [date] * len(int_col),
+                    "int_col": int_col,
+                    "int_col_2": np.random.randint(
+                        low=10, high=20, size=10000
+                    ),
+                    "float_col": float_col,
+                    "float_col_2": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "float_col_3": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "float_col_4": np.random.normal(
+                        loc=1, scale=2, size=10000
+                    ),
+                    "string_col": string_col,
+                    "string_col_2": np.random.choice(
+                        ["D", "B", "C"], size=10000
+                    ),
+                    "string_col_3": np.random.choice(
+                        ["E", "B", "C"], size=10000
+                    ),
+                    "string_col_4": np.random.choice(
+                        ["F", "B", "C"], size=10000
+                    ),
+                }
+            )
+            df_elems.append(date_data)
 
     df = pd.concat(df_elems).reset_index(drop=True)
     return df

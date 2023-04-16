@@ -5,11 +5,19 @@ from scipy.stats import percentileofscore
 from gate.summary import Summary
 import typing
 
+from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import AgglomerativeClustering
 
 
 class DriftResult(object):
-    def __init__(self, all_scores: pd.Series, nn_features: pd.DataFrame):
+    def __init__(
+        self,
+        all_scores: pd.Series,
+        nn_features: pd.DataFrame,
+    ):
         self._all_scores = all_scores
         self._nn_features = nn_features
 
@@ -98,10 +106,34 @@ def detect_drift(
     normalized.reset_index(inplace=True)
     normalized = normalized.fillna(0.0)
 
+    # Run clustering algorithm if there are more than 10 columns
+    if cluster and len(columns) >= 10:
+        clustering = compute_clusters(
+            normalized,
+            partition_column,
+            statistics,
+            current_summary._string_columns,
+            current_summary._float_columns,
+            current_summary._int_columns,
+        )
+
+        cluster_normalized = (
+            normalized.merge(clustering, on=["column"], how="left")
+            # .set_index(partition_column)
+            .groupby(["cluster", partition_column])[statistics]
+            .mean()
+            .reset_index()
+        )
+        cluster_normalized.rename({"cluster": "column"}, axis=1, inplace=True)
+
     # Run nearest neighbor algorithm to get distances
-    nn_features = normalized.pivot_table(
+    nn_features_unpivoted = (
+        cluster_normalized if (cluster and len(columns) >= 10) else normalized
+    )
+    nn_features = nn_features_unpivoted.pivot_table(
         index=partition_column, columns="column", values=statistics
     )
+
     knn = NearestNeighbors(
         n_neighbors=len(nn_features),
         p=2,
@@ -130,7 +162,91 @@ def detect_drift(
         data=np.nanmean(mink, axis=1),
         index=nn_features.index,
     )
+    print(scores)
 
-    dr = DriftResult(scores, nn_features)
+    # TODO(shreyashankar): enable clustering if needed
+    dr = DriftResult(
+        scores,
+        nn_features,
+    )
 
     return dr
+
+
+def compute_clusters(
+    normalized: pd.DataFrame,
+    partition_column: str,
+    statistics: str,
+    string_columns: typing.List[str],
+    float_columns: typing.List[str],
+    int_columns: typing.List[str],
+) -> pd.DataFrame:
+    """Computes clusters of columns in a partition summary.
+
+    Args:
+        normalized (pd.DataFrame): Normalized partition summary.
+        partition_column (str): Name of partition column.
+        statistics (str): Name of statistic.
+        string_columns (typing.List[str]): List of string columns.
+        float_columns (typing.List[str]): List of float columns.
+        int_columns (typing.List[str]): List of int columns.
+
+    Returns (pd.DataFrame): Mapping of column names to cluster numbers.
+    """
+
+    column_stats = normalized.pivot_table(
+        index="column", columns=partition_column, values=statistics
+    )
+
+    column_names = column_stats.index.values
+    column_names_to_types = {c: "string" for c in string_columns}
+    column_names_to_types.update({c: "float" for c in float_columns})
+    column_names_to_types.update({c: "int" for c in int_columns})
+
+    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = model.encode(
+        [f"{c} is of type {column_names_to_types[c]}" for c in column_names]
+    )
+
+    # column_embeddings =
+    # concat_data = np.concatenate(
+    #     (column_names.reshape(len(column_names), 1), column_stats.values),
+    #     axis=1,
+    # )
+    embedding_similarity_matrix = cosine_similarity(embeddings)
+    value_similarity_matrix = cosine_similarity(column_stats.values)
+    similarity_matrix = (
+        0.25 * embedding_similarity_matrix + 0.75 * value_similarity_matrix
+    )
+
+    # Run PCA on similarity matrix to get number of clusters
+    pca = PCA(random_state=42)
+    pca.fit(similarity_matrix)
+    cumev = np.cumsum(pca.explained_variance_ratio_)
+    # Find cluster cutoff
+    cutoff = -1
+    PCA_THRESHOLD = 0.95
+    for idx, elem in enumerate(cumev):
+        if elem > PCA_THRESHOLD:
+            cutoff = idx
+            break
+
+    clustering = AgglomerativeClustering(
+        affinity="precomputed",
+        linkage="average",
+        n_clusters=cutoff + 1,
+    )
+    clustering.fit(similarity_matrix)
+
+    # Aggregate columns based on clustering labels
+
+    cluster_labels = clustering.labels_
+    clusters = {}
+    for i, label in enumerate(cluster_labels):
+        clusters[column_names[i]] = label
+
+    return (
+        pd.DataFrame.from_dict(clusters, orient="index", columns=["cluster"])
+        .reset_index()
+        .rename(columns={"index": "column"})
+    )
