@@ -64,7 +64,7 @@ def test_drift(df_with_drift):
     assert drift_results.drifted_columns()["z-score"].abs().values[0] > 2.0
 
 
-def test_hello(df_with_drift):
+def test_drift_small_clustering(df_with_drift):
     columns = df_with_drift.columns.tolist()
     columns.remove("date")
     summary = summarize(
