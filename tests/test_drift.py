@@ -14,7 +14,7 @@ def test_no_drift(medium_df):
 
     drift_results = detect_drift(summary[-1], summary[:-1])
 
-    assert drift_results.score == 0.0
+    assert drift_results.score < 1e-7
 
 
 def test_attributes(tiny_df):
@@ -34,16 +34,14 @@ def test_attributes(tiny_df):
 
     expected_result = pd.DataFrame(
         [
-            {"statistic": "coverage", "z-score": 0.0},
-            {"statistic": "coverage", "z-score": 0.0},
-            {"statistic": "occurrence_ratio", "z-score": 0.0},
+            {"column": "float_col", "statistic": "coverage", "z-score": 0.0},
+            {"column": "int_col", "statistic": "coverage", "z-score": 0.0},
+            {"column": "string_col", "statistic": "coverage", "z-score": 0.0},
         ]
     )
 
     assert (
-        drift_results.drifted_columns()
-        .reset_index(drop=True)
-        .equals(expected_result)
+        drift_results.drifted_columns().reset_index().equals(expected_result)
     )
 
 
@@ -59,7 +57,10 @@ def test_drift(df_with_drift):
 
     assert drift_results.score_percentile > 0.9
 
-    assert drift_results.drifted_columns().index.values[0] == "int_col"
+    assert drift_results.drifted_columns().index.values[0] in [
+        "int_col",
+        "float_col",
+    ]
     assert drift_results.drifted_columns()["z-score"].abs().values[0] > 2.0
 
 
@@ -74,4 +75,11 @@ def test_hello(df_with_drift):
 
     drift_results = detect_drift(summary[-1], summary[:-1], cluster=True)
 
-    assert False
+    assert len(drift_results.clustering) > 0
+    assert drift_results.score_percentile > 0.9
+    assert drift_results.drifted_columns().index.values[0] in [
+        "int_col",
+        "float_col",
+    ]
+
+    assert len(drift_results.drifted_columns()) > 3

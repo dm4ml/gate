@@ -3,6 +3,7 @@ import numpy as np
 from scipy.stats import percentileofscore
 
 from gate.summary import Summary
+from gate.statistics import type_to_statistics
 import typing
 
 from sklearn.decomposition import PCA
@@ -17,22 +18,36 @@ class DriftResult(object):
         self,
         all_scores: pd.Series,
         nn_features: pd.DataFrame,
-    ):
+        clustered_features: pd.DataFrame,
+    ) -> None:
         self._all_scores = all_scores
         self._nn_features = nn_features
+        self._clustered_features = clustered_features
 
     @property
-    def score(self):
+    def score(self) -> float:
         return self._all_scores.iloc[-1]
 
     @property
-    def score_percentile(self):
+    def score_percentile(self) -> float:
         # Check what percentile the last elem of preds is
         return percentileofscore(self.all_scores, self.score) * 1.0 / 100
 
     @property
-    def all_scores(self):
+    def all_scores(self) -> pd.Series:
         return self._all_scores
+
+    @property
+    def clustering(self) -> typing.Dict[int, typing.List[str]]:
+        if self._clustered_features is None:
+            raise ValueError("No clustering was performed.")
+
+        clustering_map = self._clustered_features.groupby("cluster")[
+            "column"
+        ].agg(set)
+        clustering_map = clustering_map.apply(list)
+
+        return clustering_map.to_dict()
 
     def drill_down(self) -> pd.DataFrame:
         # Return a dataframe with features with highest magnitude anomaly
@@ -44,6 +59,34 @@ class DriftResult(object):
         sorted_df.rename(
             columns={sorted_df.columns[0]: "z-score"}, inplace=True
         )
+        sorted_df = sorted_df.rename_axis(["column", "statistic"])
+
+        if self._clustered_features is not None:
+            # Join the clustered features with the sorted_df
+            # sorted_df.rename(index={"column": "cluster"}, inplace=True)
+            sorted_df = sorted_df.rename_axis(
+                ["cluster", "statistic"]
+            ).reset_index()
+            sorted_df.rename(
+                columns={"z-score": "z-score-cluster"}, inplace=True
+            )
+
+            sorted_df = sorted_df.merge(
+                self._clustered_features,
+                on=["cluster", "statistic"],
+                how="left",
+            )
+
+            # Sort again
+            sorted_df = sorted_df.reindex(
+                sorted_df[["z-score-cluster", "z-score"]]
+                .abs()
+                .sort_values(
+                    by=["z-score-cluster", "z-score"], ascending=False
+                )
+                .index
+            )
+            sorted_df.set_index(["column", "statistic"], inplace=True)
 
         return sorted_df
 
@@ -57,6 +100,12 @@ class DriftResult(object):
             subset=["column"], keep="first", inplace=True
         )
         dd_results.set_index("column", inplace=True)
+
+        if self._clustered_features is not None:
+            # Reorder columns
+            dd_results = dd_results[
+                ["statistic", "z-score", "cluster", "z-score-cluster"]
+            ]
 
         return dd_results.head(limit)
 
@@ -96,42 +145,62 @@ def detect_drift(
     all_summaries = pd.concat(
         [p.value for p in previous_summaries] + [current_summary.value]
     ).reset_index(drop=True)
-    normalized = all_summaries.copy()
-    normalized.set_index([partition_column, "column"], inplace=True)
+    normalized = (
+        all_summaries.copy()
+        .melt(
+            id_vars=[partition_column, "column"],
+            value_vars=statistics,
+            var_name="statistic",
+            value_name="value",
+        )
+        .dropna()
+    )
+    # normalized.set_index([partition_column, "column"], inplace=True)
 
-    groups = normalized.groupby("column")
-    mean, std = groups.transform("mean"), groups.transform("std")
+    grouped = normalized.groupby(["column", "statistic"])
+    mean = grouped["value"].transform("mean")
+    std = grouped["value"].transform("std")
     std += 1e-7
-    normalized = (normalized[mean.columns] - mean) / std
-    normalized.reset_index(inplace=True)
-    normalized = normalized.fillna(0.0)
+
+    normalized["value"] = (normalized["value"] - mean) / std
 
     # Run clustering algorithm if there are more than 10 columns
     if cluster and len(columns) >= 10:
         clustering = compute_clusters(
             normalized,
             partition_column,
-            statistics,
             current_summary._string_columns,
             current_summary._float_columns,
             current_summary._int_columns,
         )
 
+        normalized["value_abs"] = normalized["value"].abs()
+
         cluster_normalized = (
             normalized.merge(clustering, on=["column"], how="left")
             # .set_index(partition_column)
-            .groupby(["cluster", partition_column])[statistics]
+            .groupby([partition_column, "cluster", "statistic"])["value_abs"]
             .mean()
             .reset_index()
         )
-        cluster_normalized.rename({"cluster": "column"}, axis=1, inplace=True)
+        cluster_normalized.rename(
+            {"cluster": "column", "value_abs": "value"}, axis=1, inplace=True
+        )
+        normalized.drop("value_abs", axis=1, inplace=True)
 
     # Run nearest neighbor algorithm to get distances
     nn_features_unpivoted = (
         cluster_normalized if (cluster and len(columns) >= 10) else normalized
     )
-    nn_features = nn_features_unpivoted.pivot_table(
-        index=partition_column, columns="column", values=statistics
+
+    nn_features = (
+        nn_features_unpivoted.fillna(0.0)
+        .pivot_table(
+            index=partition_column,
+            columns=["column", "statistic"],
+            values="value",
+        )
+        .fillna(0.0)
     )
 
     knn = NearestNeighbors(
@@ -162,21 +231,28 @@ def detect_drift(
         data=np.nanmean(mink, axis=1),
         index=nn_features.index,
     )
-    print(scores)
 
-    # TODO(shreyashankar): enable clustering if needed
-    dr = DriftResult(
-        scores,
-        nn_features,
-    )
+    if cluster and len(columns) >= 10:
+        partition_value = scores.index[-1]
+        clustered_features = normalized[
+            normalized[partition_column] == partition_value
+        ].merge(clustering, on=["column"], how="left")
+        clustered_features.rename({"value": "z-score"}, axis=1, inplace=True)
+        clustered_features.drop(partition_column, axis=1, inplace=True)
 
-    return dr
+        return DriftResult(
+            scores,
+            nn_features,
+            clustered_features=clustered_features,
+        )
+
+    else:
+        return DriftResult(scores, nn_features, clustered_features=None)
 
 
 def compute_clusters(
     normalized: pd.DataFrame,
     partition_column: str,
-    statistics: str,
     string_columns: typing.List[str],
     float_columns: typing.List[str],
     int_columns: typing.List[str],
@@ -186,7 +262,6 @@ def compute_clusters(
     Args:
         normalized (pd.DataFrame): Normalized partition summary.
         partition_column (str): Name of partition column.
-        statistics (str): Name of statistic.
         string_columns (typing.List[str]): List of string columns.
         float_columns (typing.List[str]): List of float columns.
         int_columns (typing.List[str]): List of int columns.
@@ -195,8 +270,8 @@ def compute_clusters(
     """
 
     column_stats = normalized.pivot_table(
-        index="column", columns=partition_column, values=statistics
-    )
+        index="column", columns=[partition_column, "statistic"], values="value"
+    ).fillna(0.0)
 
     column_names = column_stats.index.values
     column_names_to_types = {c: "string" for c in string_columns}
@@ -232,7 +307,7 @@ def compute_clusters(
             break
 
     clustering = AgglomerativeClustering(
-        affinity="precomputed",
+        metric="precomputed",
         linkage="average",
         n_clusters=cutoff + 1,
     )
