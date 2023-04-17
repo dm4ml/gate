@@ -53,3 +53,14 @@ def test_summarize(tiny_df):
     )
 
     assert expected_result.equals(summary)
+
+
+def test_bad_df(tiny_df, tiny_df_2):
+    summary = summarize(
+        tiny_df,
+        partition_column="grp",
+        columns=["string_col", "int_col", "float_col"],
+    )
+
+    with pytest.raises(ValueError):
+        summarize(tiny_df_2, previous_summaries=summary)

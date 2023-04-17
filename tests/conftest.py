@@ -18,6 +18,19 @@ def tiny_df():
 
 
 @pytest.fixture
+def tiny_df_2():
+    df = pd.DataFrame(
+        {
+            "other_grp": ["A"] * 3,
+            "string_col": ["cat", "dog", "dog"],
+            "int_col": [0, 1, None],
+            "float_col": [0.0, 0.1, 0.2],
+        }
+    )
+    return df
+
+
+@pytest.fixture
 def small_df():
     # create example data
     groups = ["A", "B", "C", "D", "E"] * 2
