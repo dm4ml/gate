@@ -7,7 +7,6 @@ from gate.statistics import type_to_statistics
 import typing
 
 from sklearn.decomposition import PCA
-from sklearn.neighbors import NearestNeighbors
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import AgglomerativeClustering
@@ -169,13 +168,7 @@ def detect_drift(
         value_name="value",
     ).dropna()
 
-    # Use min max normalization (TODO figure out if this works with real data)
     grouped = normalized.groupby(["column", "statistic"])
-    # minimum = grouped["value"].transform("min")
-    # maximum = grouped["value"].transform("max")
-    # rang = maximum - minimum
-    # normalized["value"] = (normalized["value"] - minimum) / rang
-
     mean = grouped["value"].transform("mean")
     std = grouped["value"].transform("std")
     std += 1e-10
@@ -229,44 +222,12 @@ def detect_drift(
         index=nn_features.index,
     )
 
-    # knn = NearestNeighbors(
-    #     n_neighbors=len(nn_features),
-    #     p=2,
-    #     n_jobs=-1,
-    # )
-    # knn.fit(nn_features)
-    # neighbor_graph = knn.kneighbors_graph(
-    #     nn_features,
-    #     n_neighbors=len(nn_features),
-    #     mode="distance",
-    # ).todense()
-
-    # for v in validity:
-    #     if v == 0:
-    #         v = np.nan
-
-    # tril = np.tril(neighbor_graph)
-    # tril = tril * np.vstack([validity for _ in range(len(validity))])
-    # # tril[tril == 0] = np.nan
-
-    # # Take mean of minimum k elements, row-wise
-    # mink = np.sort(tril, axis=1)
-    # mink[:, k:] = np.nan
-
-    # scores = pd.Series(
-    #     data=np.nanmean(mink, axis=1),
-    #     index=nn_features.index,
-    # )
-
     if cluster and len(columns) >= 10:
         partition_value = scores.index[-1]
         clustered_features = normalized[
             normalized[partition_column] == partition_value
         ].merge(clustering, on=["column"], how="left")
 
-        # clustered_features["value"] = clustered_features["value"].apply(
-        #     lambda x: 0.0 if np.abs(x) < z_score_cutoff else x
-        # )
         clustered_features.rename({"value": "z-score"}, axis=1, inplace=True)
         clustered_features.drop(partition_column, axis=1, inplace=True)
 
