@@ -3,14 +3,6 @@ import typing
 import pandas as pd
 import polars as pl
 
-# from gate.statistics import (
-#     compute_coverage,
-#     compute_means,
-#     compute_stdev,
-#     compute_num_unique_values,
-#     compute_num_frequent_values,
-# )
-
 
 class Summary(object):
     def __init__(
