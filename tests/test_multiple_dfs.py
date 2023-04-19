@@ -2,8 +2,10 @@ import numpy as np
 import pandas as pd
 from gate import summarize, detect_drift
 
+import os
 
-def get_df_no_drift(num_rows, num_rows_per_partition=10000):
+
+def get_df_no_drift(num_cols, num_rows_per_partition=10000):
     # create example date range
     date_range = pd.date_range(start="2022-01-01", periods=30, freq="D")
 
@@ -18,19 +20,19 @@ def get_df_no_drift(num_rows, num_rows_per_partition=10000):
                     f"int_col_{i}": np.random.randint(
                         low=0, high=10, size=num_rows_per_partition
                     )
-                    for i in range(num_rows)
+                    for i in range(num_cols)
                 },
                 **{
                     f"float_col_{i}": np.random.normal(
                         loc=0, scale=1, size=num_rows_per_partition
                     )
-                    for i in range(num_rows)
+                    for i in range(num_cols)
                 },
                 **{
                     f"string_col_{i}": np.random.choice(
                         ["A", "B", "C"], size=num_rows_per_partition
                     )
-                    for i in range(num_rows)
+                    for i in range(num_cols)
                 },
             }
         )
@@ -41,8 +43,8 @@ def get_df_no_drift(num_rows, num_rows_per_partition=10000):
     return df
 
 
-def no_drift(n_columns, n_rows_per_partition):
-    df = get_df_no_drift(n_columns, n_rows_per_partition)
+def test_no_drift_scale():
+    df = get_df_no_drift(100)
     columns = df.columns.to_list()
     columns.remove("date")
 
@@ -57,7 +59,23 @@ def no_drift(n_columns, n_rows_per_partition):
     assert abs(0.5 - drift_results.score_percentile) < 0.5
 
 
-def test_no_drift_scale():
-    # no_drift(100, int(1e5))
-    no_drift(1000, int(1e4))
-    # no_drift(10000, int(1e4))
+def test_drift_scale():
+    df = get_df_no_drift(100)
+
+    # Add drift
+    max_date = df["date"].max()
+    for i in range(50):
+        df.loc[df["date"] == max_date, f"int_col_{i}"] = 1000
+
+    columns = df.columns.to_list()
+    columns.remove("date")
+
+    summaries = summarize(
+        df,
+        partition_column="date",
+        columns=columns,
+    )
+
+    drift_results = detect_drift(summaries[-1], summaries[:-1])
+
+    assert drift_results.score_percentile > 0.9
