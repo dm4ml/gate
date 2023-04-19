@@ -92,7 +92,17 @@ class DriftResult(object):
         # Drop duplicate column names
         dd_results = self.drill_down()
 
+        if self._clustered_features is not None:
+            # Sort by z-score first, then z-score-cluster
+            dd_results = dd_results.reindex(
+                dd_results[["z-score-cluster", "z-score"]]
+                .abs()
+                .sort_values(by=["z-score", "z-score-cluster"], ascending=False)
+                .index
+            )
+
         dd_results.reset_index(inplace=True)
+
         dd_results.drop_duplicates(subset=["column"], keep="first", inplace=True)
         dd_results.set_index("column", inplace=True)
 
@@ -138,7 +148,7 @@ def detect_drift(
             "You must have at least 1 previous partition summary to detect drift."
         )
 
-    partition_column = current_summary.partition_column
+    partition_key = current_summary.partition_key
     columns = current_summary.columns
     statistics = current_summary.statistics
 
@@ -162,7 +172,7 @@ def detect_drift(
     )
 
     normalized = all_summaries.melt(
-        id_vars=[partition_column, "column"],
+        id_vars=[partition_key, "column"],
         value_vars=statistics,
         var_name="statistic",
         value_name="value",
@@ -178,7 +188,7 @@ def detect_drift(
     if cluster and len(columns) >= 10:
         clustering = compute_clusters(
             normalized,
-            partition_column,
+            partition_key,
             current_summary._string_columns,
             current_summary._float_columns,
             current_summary._int_columns,
@@ -188,8 +198,8 @@ def detect_drift(
 
         cluster_normalized = (
             normalized.merge(clustering, on=["column"], how="left")
-            # .set_index(partition_column)
-            .groupby([partition_column, "cluster", "statistic"])["value_abs"]
+            # .set_index(partition_key)
+            .groupby([partition_key, "cluster", "statistic"])["value_abs"]
             .mean()
             .reset_index()
         )
@@ -209,7 +219,7 @@ def detect_drift(
     nn_features = (
         nn_features_unpivoted.fillna(0.0)
         .pivot_table(
-            index=partition_column,
+            index=partition_key,
             columns=["column", "statistic"],
             values="value",
         )
@@ -217,19 +227,23 @@ def detect_drift(
     )
 
     dists, _ = cKDTree(nn_features.values).query(nn_features.values, k=k + 1)
+
+    # Replace inf with nan
+    dists[np.isinf(dists)] = np.nan
+
     scores = pd.Series(
-        data=np.mean(dists[:, 1:], axis=1),
+        data=np.nanmean(dists[:, 1:], axis=1),
         index=nn_features.index,
     )
 
     if cluster and len(columns) >= 10:
         partition_value = scores.index[-1]
         clustered_features = normalized[
-            normalized[partition_column] == partition_value
+            normalized[partition_key] == partition_value
         ].merge(clustering, on=["column"], how="left")
 
         clustered_features.rename({"value": "z-score"}, axis=1, inplace=True)
-        clustered_features.drop(partition_column, axis=1, inplace=True)
+        clustered_features.drop(partition_key, axis=1, inplace=True)
 
         return DriftResult(
             scores,
@@ -243,7 +257,7 @@ def detect_drift(
 
 def compute_clusters(
     normalized: pd.DataFrame,
-    partition_column: str,
+    partition_key: str,
     string_columns: typing.List[str],
     float_columns: typing.List[str],
     int_columns: typing.List[str],
@@ -252,7 +266,7 @@ def compute_clusters(
 
     Args:
         normalized (pd.DataFrame): Normalized partition summary.
-        partition_column (str): Name of partition column.
+        partition_key (str): Name of partition column.
         string_columns (typing.List[str]): List of string columns.
         float_columns (typing.List[str]): List of float columns.
         int_columns (typing.List[str]): List of int columns.
@@ -261,7 +275,7 @@ def compute_clusters(
     """
 
     column_stats = normalized.pivot_table(
-        index="column", columns=[partition_column, "statistic"], values="value"
+        index="column", columns=[partition_key, "statistic"], values="value"
     ).fillna(0.0)
 
     column_names = column_stats.index.values

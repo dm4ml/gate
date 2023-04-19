@@ -42,17 +42,31 @@ def get_df_no_drift(num_cols, num_rows_per_partition=10000):
 
 
 def test_no_drift_scale():
-    df = get_df_no_drift(100)
+    import time
+
+    start = time.time()
+    df = get_df_no_drift(1000)
+    df_creation_time = time.time() - start
+
     columns = df.columns.to_list()
     columns.remove("date")
 
+    start = time.time()
     summaries = summarize(
         df,
-        partition_column="date",
+        partition_key="date",
         columns=columns,
     )
+    summary_time = time.time() - start
 
+    start = time.time()
     drift_results = detect_drift(summaries[-1], summaries[:-1])
+    drift_time = time.time() - start
+
+    print(f"df_creation_time: {df_creation_time}")
+    print(f"summary_time: {summary_time}")
+    print(f"drift_time: {drift_time}")
+    assert False
 
     assert abs(0.5 - drift_results.score_percentile) < 0.5
 
@@ -70,7 +84,7 @@ def test_drift_scale():
 
     summaries = summarize(
         df,
-        partition_column="date",
+        partition_key="date",
         columns=columns,
     )
 

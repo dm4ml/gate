@@ -11,31 +11,30 @@ class Summary(object):
         string_columns: typing.List[str],
         float_columns: typing.List[str],
         int_columns: typing.List[str],
-        partition_column: str,
-        window: int,
+        partition_key: str,
     ):
         self._value = value
         self._string_columns = string_columns
         self._float_columns = float_columns
         self._int_columns = int_columns
-        self._partition_column = partition_column
-        self._window = window
+        self._partition_key = partition_key
+        self._partition = value[partition_key].iloc[0]
 
     @property
     def value(self) -> pd.DataFrame:
         return self._value
 
     @property
+    def partition(self) -> str:
+        return self._partition
+
+    @property
     def columns(self) -> typing.List[str]:
         return self._string_columns + self._float_columns + self._int_columns
 
     @property
-    def partition_column(self) -> str:
-        return self._partition_column
-
-    @property
-    def window(self) -> int:
-        return self._window
+    def partition_key(self) -> str:
+        return self._partition_key
 
     @property
     def statistics(self) -> typing.List[str]:
@@ -54,17 +53,15 @@ class Summary(object):
         cls,
         raw_data: pd.DataFrame,
         columns: typing.List[str] = [],
-        partition_column: str = "",
-        window: int = 0,
+        partition_key: str = "",
         previous_summaries: typing.List["Summary"] = [],
     ) -> typing.List["Summary"]:
         if len(previous_summaries) > 0:
-            partition_column = previous_summaries[0].partition_column
+            partition_key = previous_summaries[0].partition_key
             columns = previous_summaries[0].columns
             string_columns = previous_summaries[0]._string_columns
             float_columns = previous_summaries[0]._float_columns
             int_columns = previous_summaries[0]._int_columns
-            window = previous_summaries[0].window
         else:
             # Set up columns if it's the first partition
             assert len(columns) > 0
@@ -82,9 +79,9 @@ class Summary(object):
                 columns
             )
 
-        if partition_column not in raw_data.columns:
+        if partition_key not in raw_data.columns:
             raise ValueError(
-                f"Partition column {partition_column} is not in dataframe columns."
+                f"Partition column {partition_key} is not in dataframe columns."
             )
         if not set(columns).issubset(set(raw_data.columns)):
             raise ValueError(
@@ -95,41 +92,41 @@ class Summary(object):
 
         # Convert to polars and melt
         polars_df = pl.DataFrame(raw_data)
-        polars_df[partition_column].n_unique()
+        polars_df[partition_key].n_unique()
         # .melt(
-        #     id_vars=[partition_column],
+        #     id_vars=[partition_key],
         #     value_vars=columns,
         #     variable_name="column",
         #     value_name="value",
         # )
 
         statistics = {
-            "coverage": polars_df.groupby(partition_column).agg(
+            "coverage": polars_df.groupby(partition_key).agg(
                 [pl.col(c).is_not_null().mean().alias(c) for c in columns]
             ),
-            "mean": polars_df.groupby(partition_column).agg(
+            "mean": polars_df.groupby(partition_key).agg(
                 [pl.col(c).mean().alias(c) for c in float_columns + int_columns]
             ),
-            "stdev": polars_df.groupby(partition_column).agg(
+            "stdev": polars_df.groupby(partition_key).agg(
                 [
                     pl.col(c).std().cast(pl.Float64).alias(c)
                     for c in float_columns + int_columns
                 ]
             ),
-            "num_unique_values": polars_df.groupby(partition_column).agg(
+            "num_unique_values": polars_df.groupby(partition_key).agg(
                 [
                     pl.col(c).approx_unique().cast(pl.Float64).alias(c)
                     for c in string_columns + int_columns
                 ]
             ),
-            "occurrence_ratio": polars_df.groupby(partition_column).agg(
+            "occurrence_ratio": polars_df.groupby(partition_key).agg(
                 [
                     (pl.col(c).unique_counts().max())
                     / (pl.col(c).count()).cast(pl.Float64).alias(c)
                     for c in string_columns + int_columns
                 ]
             ),
-            "p95": polars_df.groupby(partition_column).agg(
+            "p95": polars_df.groupby(partition_key).agg(
                 [
                     pl.col(c).quantile(0.95).cast(pl.Float64).alias(c)
                     for c in float_columns + int_columns
@@ -150,12 +147,12 @@ class Summary(object):
 
         pivoted = (
             current_statistics.melt(
-                id_vars=[partition_column, "statistic"],
+                id_vars=[partition_key, "statistic"],
                 value_vars=columns,
                 var_name="column",
             )
             .pivot(
-                index=[partition_column, "column"],
+                index=[partition_key, "column"],
                 columns="statistic",
                 values="value",
             )
@@ -163,15 +160,14 @@ class Summary(object):
         )
 
         groups = []
-        for _, group in pivoted.groupby(partition_column):
+        for _, group in pivoted.groupby(partition_key):
             groups.append(
                 cls(
                     group.reset_index(drop=True),
                     string_columns,
                     float_columns,
                     int_columns,
-                    partition_column,
-                    window,
+                    partition_key,
                 )
             )
         return groups
@@ -180,7 +176,7 @@ class Summary(object):
         return self.value.to_string()
 
 
-# num_frequent_values = polars_df.groupby(partition_column).agg(
+# num_frequent_values = polars_df.groupby(partition_key).agg(
 #     [
 #         pl.col(c)
 #         .apply(
@@ -194,7 +190,7 @@ class Summary(object):
 # )
 
 # num_frequent_values = pl.DataFrame(
-#     raw_data.groupby(partition_column)
+#     raw_data.groupby(partition_key)
 #     .agg(
 #         {
 #             c: lambda x: np.histogram(x, bins="auto", density=True)[

@@ -5,7 +5,7 @@ from gate import summarize, detect_drift
 def test_no_drift(medium_df):
     summary = summarize(
         medium_df,
-        partition_column="date",
+        partition_key="date",
         columns=["string_col", "int_col", "float_col"],
     )
     assert len(summary) == 30
@@ -18,7 +18,7 @@ def test_no_drift(medium_df):
 def test_attributes(tiny_df):
     summary = summarize(
         tiny_df,
-        partition_column="grp",
+        partition_key="grp",
         columns=["string_col", "int_col", "float_col"],
     )
     assert len(summary) == 1
@@ -30,7 +30,7 @@ def test_attributes(tiny_df):
 def test_drift(df_with_drift):
     summary = summarize(
         df_with_drift,
-        partition_column="date",
+        partition_key="date",
         columns=["string_col", "int_col", "float_col"],
     )
     assert len(summary) == 10
@@ -51,7 +51,7 @@ def test_drift_small_clustering(df_with_drift):
     columns.remove("date")
     summary = summarize(
         df_with_drift,
-        partition_column="date",
+        partition_key="date",
         columns=columns,
     )
 

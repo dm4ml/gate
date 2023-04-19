@@ -7,7 +7,7 @@ from gate import summarize
 def test_summarize(tiny_df):
     summary = summarize(
         tiny_df,
-        partition_column="grp",
+        partition_key="grp",
         columns=["string_col", "int_col", "float_col"],
     )
     assert len(summary) == 1
@@ -58,7 +58,7 @@ def test_summarize(tiny_df):
 def test_bad_df(tiny_df, tiny_df_2):
     summary = summarize(
         tiny_df,
-        partition_column="grp",
+        partition_key="grp",
         columns=["string_col", "int_col", "float_col"],
     )
 

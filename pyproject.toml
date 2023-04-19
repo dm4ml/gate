@@ -20,6 +20,8 @@ pyarrow = "^11.0.0"
 pytest = "^7.3.1"
 ruff = "^0.0.261"
 pre-commit = "^3.2.2"
+matplotlib = "^3.7.1"
+seaborn = "^0.12.2"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

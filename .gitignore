@@ -1,3 +1,5 @@
-*ipynb*
+examples/data*
 *__pycache__*
 *.pytest_cache*
+canonical-partitioned-dataset*
+*.ipynb_checkpoints*
