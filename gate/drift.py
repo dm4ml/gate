@@ -1,17 +1,15 @@
-import pandas as pd
-import numpy as np
-from scipy.stats import percentileofscore
-
-from gate.summary import Summary
-from gate.statistics import type_to_statistics
 import typing
 
-from sklearn.decomposition import PCA
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.cluster import AgglomerativeClustering
-
+import numpy as np
+import pandas as pd
 from scipy.spatial import cKDTree
+from scipy.stats import percentileofscore
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.decomposition import PCA
+from sklearn.metrics.pairwise import cosine_similarity
+
+from gate.summary import Summary
 
 
 class DriftResult(object):
@@ -43,9 +41,7 @@ class DriftResult(object):
         if self._clustered_features is None:
             raise ValueError("No clustering was performed.")
 
-        clustering_map = self._clustered_features.groupby("cluster")[
-            "column"
-        ].agg(set)
+        clustering_map = self._clustered_features.groupby("cluster")["column"].agg(set)
         clustering_map = clustering_map.apply(list)
 
         return clustering_map.to_dict()
@@ -57,20 +53,14 @@ class DriftResult(object):
         last_day = self._nn_features.iloc[-1]
         sorted_cols = last_day.abs().sort_values(ascending=False).index
         sorted_df = last_day[sorted_cols].to_frame()
-        sorted_df.rename(
-            columns={sorted_df.columns[0]: "z-score"}, inplace=True
-        )
+        sorted_df.rename(columns={sorted_df.columns[0]: "z-score"}, inplace=True)
         sorted_df = sorted_df.rename_axis(["column", "statistic"])
 
         if self._clustered_features is not None:
             # Join the clustered features with the sorted_df
             # sorted_df.rename(index={"column": "cluster"}, inplace=True)
-            sorted_df = sorted_df.rename_axis(
-                ["cluster", "statistic"]
-            ).reset_index()
-            sorted_df.rename(
-                columns={"z-score": "z-score-cluster"}, inplace=True
-            )
+            sorted_df = sorted_df.rename_axis(["cluster", "statistic"]).reset_index()
+            sorted_df.rename(columns={"z-score": "z-score-cluster"}, inplace=True)
 
             sorted_df = sorted_df.merge(
                 self._clustered_features,
@@ -82,9 +72,7 @@ class DriftResult(object):
             sorted_df = sorted_df.reindex(
                 sorted_df[["z-score-cluster", "z-score"]]
                 .abs()
-                .sort_values(
-                    by=["z-score-cluster", "z-score"], ascending=False
-                )
+                .sort_values(by=["z-score-cluster", "z-score"], ascending=False)
                 .index
             )
             sorted_df.set_index(["column", "statistic"], inplace=True)
@@ -92,7 +80,11 @@ class DriftResult(object):
         return sorted_df
 
     def __str__(self) -> str:
-        results = f"Drift score: {self.score:.4f} ({self.score_percentile:.2%} percentile)\nTop drifted columns:\n{self.drifted_columns()}"
+        results = (
+            "Drift score:"
+            f" {self.score:.4f} ({self.score_percentile:.2%} percentile)\nTop"
+            f" drifted columns:\n{self.drifted_columns()}"
+        )
         return results
 
     def drifted_columns(self, limit: int = 10) -> pd.DataFrame:
@@ -101,9 +93,7 @@ class DriftResult(object):
         dd_results = self.drill_down()
 
         dd_results.reset_index(inplace=True)
-        dd_results.drop_duplicates(
-            subset=["column"], keep="first", inplace=True
-        )
+        dd_results.drop_duplicates(subset=["column"], keep="first", inplace=True)
         dd_results.set_index("column", inplace=True)
 
         if self._clustered_features is not None:
@@ -123,20 +113,29 @@ def detect_drift(
     cluster: bool = True,
     k: int = 5,
 ) -> DriftResult:
-    """Computes whether the current partition summary has drifted from previous summaries.
+    """Computes whether the current partition summary has drifted from previous
+    summaries.
 
     Args:
-        current_summary (Summary): Partition summary for current partition.
-        previous_summaries (typing.List[Summary]): Previous partitions' summaries.
-        validity (typing.List[int], optional): indicator list identifying which partition summaries are valid. 1 if valid, 0 if invalid. If empty, we assume all partition summaries are valid. Must be empty or equal to length of previous_summaries.
-        cluster (bool, optional): Whether or not to cluster columns in summaries. Increases runtime but also increases precision in drift detection. Only engaged if summaries have more than 10 columns. Defaults to True.
+        current_summary (Summary):
+            Partition summary for current partition.
+        previous_summaries (typing.List[Summary]):
+            Previous partition summaries.
+        validity (typing.List[int], optional):
+            indicator list identifying which partition summaries are valid. 1
+            if valid, 0 if invalid. If empty, we assume all partition summaries
+            are valid. Must be empty or equal to length of previous_summaries.
+        cluster (bool, optional):
+            Whether or not to cluster columns in summaries. Increases runtime
+            but also increases precision in drift detection. Only engaged if
+            summaries have more than 10 columns. Defaults to True.
         k (int, optional): Number of nearest neighbor partitions to inspect.
 
     Returns (DriftResult): DriftResult object with score and score percentile.
     """
     if len(previous_summaries) == 0:
         raise ValueError(
-            f"You must have at least 1 previous partition summary to detect drift."
+            "You must have at least 1 previous partition summary to detect drift."
         )
 
     partition_column = current_summary.partition_column
@@ -148,7 +147,8 @@ def detect_drift(
         validity = [1] * len(previous_summaries)
     if len(validity) != len(previous_summaries):
         raise ValueError(
-            f"Validity vector has length {len(validity)} but should have length {len(previous_summaries)} to match previous_summaries."
+            f"Validity vector has length {len(validity)} but should have"
+            f" length {len(previous_summaries)} to match previous_summaries."
         )
     validity.append(1)
 
@@ -157,9 +157,9 @@ def detect_drift(
     ]
 
     # Normalize current and previous partition summaries
-    all_summaries = pd.concat(
-        prev_summaries + [current_summary.value]
-    ).reset_index(drop=True)
+    all_summaries = pd.concat(prev_summaries + [current_summary.value]).reset_index(
+        drop=True
+    )
 
     normalized = all_summaries.melt(
         id_vars=[partition_column, "column"],

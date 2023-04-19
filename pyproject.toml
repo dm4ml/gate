@@ -19,9 +19,28 @@ pyarrow = "^11.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
+ruff = "^0.0.261"
+pre-commit = "^3.2.2"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.black]
+max-line-length = 88
+preview = true
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+| \.hg
+| \.mypy_cache
+| \.tox
+| \.venv
+| _build
+| buck-out
+| build
+)/
+'''
 
 [build-system]
 requires = ["poetry-core"]

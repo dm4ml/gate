@@ -1,5 +1,3 @@
-import numpy as np
-import pandas as pd
 import pytest
 from gate import summarize, detect_drift
 
@@ -26,7 +24,7 @@ def test_attributes(tiny_df):
     assert len(summary) == 1
 
     with pytest.raises(ValueError):
-        drift_results = detect_drift(summary[-1], summary[:-1])
+        detect_drift(summary[-1], summary[:-1])
 
 
 def test_drift(df_with_drift):

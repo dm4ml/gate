@@ -1,9 +1,7 @@
-import duckdb
+import typing
 
 import pandas as pd
 import polars as pl
-import typing
-import numpy as np
 
 # from gate.statistics import (
 #     compute_coverage,
@@ -86,13 +84,11 @@ class Summary(object):
             types = raw_data.dtypes.to_dict()
             column_types = {c: types[c] for c in columns}
             string_columns = [c for c, t in column_types.items() if t == "O"]
-            float_columns = [
-                c for c, t in column_types.items() if t == "float"
-            ]
+            float_columns = [c for c, t in column_types.items() if t == "float"]
             int_columns = [c for c, t in column_types.items() if t == "int"]
-            assert len(string_columns) + len(float_columns) + len(
-                int_columns
-            ) == len(columns)
+            assert len(string_columns) + len(float_columns) + len(int_columns) == len(
+                columns
+            )
 
         if partition_column not in raw_data.columns:
             raise ValueError(
@@ -107,7 +103,7 @@ class Summary(object):
 
         # Convert to polars and melt
         polars_df = pl.DataFrame(raw_data)
-        num_partitions = polars_df[partition_column].n_unique()
+        polars_df[partition_column].n_unique()
         # .melt(
         #     id_vars=[partition_column],
         #     value_vars=columns,
@@ -120,10 +116,7 @@ class Summary(object):
                 [pl.col(c).is_not_null().mean().alias(c) for c in columns]
             ),
             "mean": polars_df.groupby(partition_column).agg(
-                [
-                    pl.col(c).mean().alias(c)
-                    for c in float_columns + int_columns
-                ]
+                [pl.col(c).mean().alias(c) for c in float_columns + int_columns]
             ),
             "stdev": polars_df.groupby(partition_column).agg(
                 [
@@ -154,15 +147,14 @@ class Summary(object):
 
         # Merge the statistics into a single dataframe
         for name, df in statistics.items():
-            statistics[name] = df.with_columns(
-                [pl.lit(name).alias("statistic")]
-            )
+            statistics[name] = df.with_columns([pl.lit(name).alias("statistic")])
 
         current_statistics = pl.concat(
             list(statistics.values()), how="diagonal"
         ).to_pandas()
 
-        # # Pivot such that columns are the statistics and rows are the row name, and it's grouped by partition col
+        # Pivot such that columns are the statistics and rows are the row name,
+        # and it's grouped by partition col
 
         pivoted = (
             current_statistics.melt(
