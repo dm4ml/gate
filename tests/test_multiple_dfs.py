@@ -77,6 +77,3 @@ def test_drift_scale():
     drift_results = detect_drift(summaries[-1], summaries[:-1])
 
     assert drift_results.score_percentile > 0.9
-
-
-p
