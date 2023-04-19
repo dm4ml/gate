@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 from gate import summarize, detect_drift
 
-import os
-
 
 def get_df_no_drift(num_cols, num_rows_per_partition=10000):
     # create example date range
@@ -79,3 +77,6 @@ def test_drift_scale():
     drift_results = detect_drift(summaries[-1], summaries[:-1])
 
     assert drift_results.score_percentile > 0.9
+
+
+p
