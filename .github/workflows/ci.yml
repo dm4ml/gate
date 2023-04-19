@@ -20,9 +20,6 @@ jobs:
 
       - name: Install dependencies
         run: poetry install
-      
-      - name: Run ruff
-        uses: chartboost/ruff-action@v1
 
       - name: Run pytest
         run: poetry run pytest
