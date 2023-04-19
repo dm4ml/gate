@@ -12,6 +12,8 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import AgglomerativeClustering
 
+from scipy.spatial import cKDTree
+
 
 class DriftResult(object):
     def __init__(
@@ -90,6 +92,10 @@ class DriftResult(object):
 
         return sorted_df
 
+    def __str__(self) -> str:
+        results = f"Drift score: {self.score:.4f} ({self.score_percentile:.2%} percentile)\nTop drifted columns:\n{self.drifted_columns()}"
+        return results
+
     def drifted_columns(self, limit: int = 10) -> pd.DataFrame:
         # Return a dataframe of the top limit columns that have drifted
         # Drop duplicate column names
@@ -106,6 +112,7 @@ class DriftResult(object):
             dd_results = dd_results[
                 ["statistic", "z-score", "cluster", "z-score-cluster"]
             ]
+            dd_results = dd_results[dd_results["z-score-cluster"].abs() > 0.0]
 
         return dd_results.head(limit)
 
@@ -128,6 +135,11 @@ def detect_drift(
 
     Returns (DriftResult): DriftResult object with score and score percentile.
     """
+    if len(previous_summaries) == 0:
+        raise ValueError(
+            f"You must have at least 1 previous partition summary to detect drift."
+        )
+
     partition_column = current_summary.partition_column
     columns = current_summary.columns
     statistics = current_summary.statistics
@@ -141,27 +153,32 @@ def detect_drift(
         )
     validity.append(1)
 
+    prev_summaries = [
+        s.value for i, s in enumerate(previous_summaries) if validity[i] == 1
+    ]
+
     # Normalize current and previous partition summaries
     all_summaries = pd.concat(
-        [p.value for p in previous_summaries] + [current_summary.value]
+        prev_summaries + [current_summary.value]
     ).reset_index(drop=True)
-    normalized = (
-        all_summaries.copy()
-        .melt(
-            id_vars=[partition_column, "column"],
-            value_vars=statistics,
-            var_name="statistic",
-            value_name="value",
-        )
-        .dropna()
-    )
-    # normalized.set_index([partition_column, "column"], inplace=True)
 
+    normalized = all_summaries.melt(
+        id_vars=[partition_column, "column"],
+        value_vars=statistics,
+        var_name="statistic",
+        value_name="value",
+    ).dropna()
+
+    # Use min max normalization (TODO figure out if this works with real data)
     grouped = normalized.groupby(["column", "statistic"])
+    # minimum = grouped["value"].transform("min")
+    # maximum = grouped["value"].transform("max")
+    # rang = maximum - minimum
+    # normalized["value"] = (normalized["value"] - minimum) / rang
+
     mean = grouped["value"].transform("mean")
     std = grouped["value"].transform("std")
-    std += 1e-7
-
+    std += 1e-10
     normalized["value"] = (normalized["value"] - mean) / std
 
     # Run clustering algorithm if there are more than 10 columns
@@ -192,6 +209,9 @@ def detect_drift(
     nn_features_unpivoted = (
         cluster_normalized if (cluster and len(columns) >= 10) else normalized
     )
+    # nn_features_unpivoted["value"] = nn_features_unpivoted["value"].apply(
+    #     lambda x: 0.0 if np.abs(x) < z_score_cutoff else x
+    # )
 
     nn_features = (
         nn_features_unpivoted.fillna(0.0)
@@ -203,40 +223,50 @@ def detect_drift(
         .fillna(0.0)
     )
 
-    knn = NearestNeighbors(
-        n_neighbors=len(nn_features),
-        p=2,
-        n_jobs=-1,
-    )
-    knn.fit(nn_features)
-    neighbor_graph = knn.kneighbors_graph(
-        nn_features,
-        n_neighbors=len(nn_features),
-        mode="distance",
-    ).todense()
-
-    for v in validity:
-        if v == 0:
-            v = np.nan
-
-    tril = np.tril(neighbor_graph)
-    tril = tril * np.vstack([validity for _ in range(len(validity))])
-    # tril[tril == 0] = np.nan
-
-    # Take mean of minimum k elements, row-wise
-    mink = np.sort(tril, axis=1)
-    mink[:, k:] = np.nan
-
+    dists, _ = cKDTree(nn_features.values).query(nn_features.values, k=k + 1)
     scores = pd.Series(
-        data=np.nanmean(mink, axis=1),
+        data=np.mean(dists[:, 1:], axis=1),
         index=nn_features.index,
     )
+
+    # knn = NearestNeighbors(
+    #     n_neighbors=len(nn_features),
+    #     p=2,
+    #     n_jobs=-1,
+    # )
+    # knn.fit(nn_features)
+    # neighbor_graph = knn.kneighbors_graph(
+    #     nn_features,
+    #     n_neighbors=len(nn_features),
+    #     mode="distance",
+    # ).todense()
+
+    # for v in validity:
+    #     if v == 0:
+    #         v = np.nan
+
+    # tril = np.tril(neighbor_graph)
+    # tril = tril * np.vstack([validity for _ in range(len(validity))])
+    # # tril[tril == 0] = np.nan
+
+    # # Take mean of minimum k elements, row-wise
+    # mink = np.sort(tril, axis=1)
+    # mink[:, k:] = np.nan
+
+    # scores = pd.Series(
+    #     data=np.nanmean(mink, axis=1),
+    #     index=nn_features.index,
+    # )
 
     if cluster and len(columns) >= 10:
         partition_value = scores.index[-1]
         clustered_features = normalized[
             normalized[partition_column] == partition_value
         ].merge(clustering, on=["column"], how="left")
+
+        # clustered_features["value"] = clustered_features["value"].apply(
+        #     lambda x: 0.0 if np.abs(x) < z_score_cutoff else x
+        # )
         clustered_features.rename({"value": "z-score"}, axis=1, inplace=True)
         clustered_features.drop(partition_column, axis=1, inplace=True)
 
@@ -283,11 +313,6 @@ def compute_clusters(
         [f"{c} is of type {column_names_to_types[c]}" for c in column_names]
     )
 
-    # column_embeddings =
-    # concat_data = np.concatenate(
-    #     (column_names.reshape(len(column_names), 1), column_stats.values),
-    #     axis=1,
-    # )
     embedding_similarity_matrix = cosine_similarity(embeddings)
     value_similarity_matrix = cosine_similarity(column_stats.values)
     similarity_matrix = (

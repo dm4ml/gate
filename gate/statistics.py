@@ -1,30 +1,31 @@
+import numpy as np
 import pandas as pd
 import duckdb
 import typing
 
+import polars as pl
 
-def compute_coverage(
-    con: duckdb.DuckDBPyConnection,
-    df_name: str,
-    columns: typing.List[str],
-    partition_column: str,
-) -> pd.DataFrame:
-    """This function computes the coverage of columns in a dataframe.
-    Args:
-        con (duckdb.DuckDBPyConnection): DuckDB connection to use.
-        df_name (str): Name of the dataframe to compute coverage for.
-        columns (typing.List[str]): List of columns to compute coverage for.
-        partition_column (str): Column to partition the dataframe by. Must be in df.columns. Can be empty if no partitioning is desired, or if the dataframe represents a single partition.
 
-    Returns:
-        pd.DataFrame: Dataframe containing the coverage of each column in the dataframe, partitioned by the partition col.
-    """
-    query = f"SELECT {partition_column}, "
-    for column in columns:
-        query += f"COUNT(NULLIF({column}, NULL))::FLOAT / COUNT(*)::FLOAT AS {column}, "
-    query = query[:-2] + f" FROM {df_name} GROUP BY {partition_column}"
+# def compute_coverage(
+#     df: pl.DataFrame,
+#     partition_column: str,
+# ) -> pl.DataFrame:
+#     """This function computes the coverage of columns in a dataframe.
+#     Args:
+#         df (pl.DataFrame): Dataframe to compute coverage for.
+#         partition_column (str): Column to partition the dataframe by. Must be in df.columns. Can be empty if no partitioning is desired, or if the dataframe represents a single partition.
 
-    return con.execute(query).fetchdf()
+#     Returns:
+#         pl.DataFrame: Dataframe containing the coverage of each column in the dataframe, partitioned by the partition col.
+#     """
+#     query = f"SELECT {partition_column}, "
+#     for column in columns:
+#         query += f"COUNT(NULLIF({column}, NULL))::FLOAT / COUNT(*)::FLOAT AS {column}, "
+#     query = query[:-2] + f" FROM {df_name} GROUP BY {partition_column}"
+
+#     df.groupby([partition_column, variable_column]).agg(fraction_non_null=('value_col', lambda x: pl.col(x).is_not_null().mean()))
+
+#     return con.execute(query).fetchdf()
 
 
 def compute_means(
@@ -133,38 +134,28 @@ def compute_occurrence_ratio(
 
 
 def compute_num_frequent_values(
-    con: duckdb.DuckDBPyConnection,
-    df_name: str,
+    df: pd.DataFrame,
     columns: typing.List[str],
     partition_column: str,
 ) -> pd.DataFrame:
     """This function computes the count of the bin with the most values for each column.
 
     Args:
-        con (duckdb.DuckDBPyConnection): DuckDB connection to use.
-        df_name (str): Name of the dataframe to compute num_frequent_values for.
+        df: Dataframe to compute num_frequent_values for.
         columns (typing.List[str]): List of columns to compute num_frequent_values for.
         partition_column (str): Column to partition the dataframe by. Must be in df.columns. Can be empty if no partitioning is desired, or if the dataframe represents a single partition.
 
     Returns:
         pd.DataFrame: Dataframe containing the num_frequent_values of each column in the dataframe, partitioned by the partition col.
     """
-    queries = []
-    for col in columns:
-        queries.append(f"histogram({col}) AS {col}")
 
-    query = f"SELECT {partition_column}, {''.join([f'{q},' for q in queries])[:-1]} FROM {df_name} GROUP BY {partition_column}"
-
-    result = con.execute(query).fetchdf()
-    new_result = pd.DataFrame(columns=result.columns)
-
-    for col in result.columns:
-        if col == partition_column:
-            new_result[col] = result[col]
-        else:
-            new_result[col] = result[col].apply(lambda x: max(x["value"]))
-
-    return new_result
+    grouped = df.groupby(partition_column).agg(
+        {
+            c: lambda x: np.histogram(x, bins="auto", density=True)[0].max()
+            for c in columns
+        }
+    )
+    return grouped.reset_index()
 
 
 def type_to_statistics(t: str) -> typing.List[str]:
@@ -187,7 +178,7 @@ def type_to_statistics(t: str) -> typing.List[str]:
             "stdev",
             "num_unique_values",
             "occurrence_ratio",
-            "num_frequent_values",
+            "p95",
         ]
 
     if t == "float":
@@ -195,8 +186,7 @@ def type_to_statistics(t: str) -> typing.List[str]:
             "coverage",
             "mean",
             "stdev",
-            "occurrence_ratio",
-            "num_frequent_values",
+            "p95",
         ]
 
     if t == "string":

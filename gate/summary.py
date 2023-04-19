@@ -1,15 +1,17 @@
 import duckdb
 
 import pandas as pd
+import polars as pl
 import typing
+import numpy as np
 
-from gate.statistics import (
-    compute_coverage,
-    compute_means,
-    compute_stdev,
-    compute_num_unique_values,
-    compute_num_frequent_values,
-)
+# from gate.statistics import (
+#     compute_coverage,
+#     compute_means,
+#     compute_stdev,
+#     compute_num_unique_values,
+#     compute_num_frequent_values,
+# )
 
 
 class Summary(object):
@@ -53,7 +55,8 @@ class Summary(object):
             "stdev",
             "num_unique_values",
             "occurrence_ratio",
-            "num_frequent_values",
+            # "num_frequent_values",
+            "p95",
         ]
 
     @classmethod
@@ -101,45 +104,65 @@ class Summary(object):
             )
 
         # Compute the summary statistics
-        con = duckdb.connect()
-        con.register("raw_data", raw_data)
+
+        # Convert to polars and melt
+        polars_df = pl.DataFrame(raw_data)
+        num_partitions = polars_df[partition_column].n_unique()
+        # .melt(
+        #     id_vars=[partition_column],
+        #     value_vars=columns,
+        #     variable_name="column",
+        #     value_name="value",
+        # )
 
         statistics = {
-            "coverage": compute_coverage(
-                con, "raw_data", columns, partition_column
+            "coverage": polars_df.groupby(partition_column).agg(
+                [pl.col(c).is_not_null().mean().alias(c) for c in columns]
             ),
-            "mean": compute_means(
-                con, "raw_data", float_columns + int_columns, partition_column
+            "mean": polars_df.groupby(partition_column).agg(
+                [
+                    pl.col(c).mean().alias(c)
+                    for c in float_columns + int_columns
+                ]
             ),
-            "stdev": compute_stdev(
-                con, "raw_data", float_columns + int_columns, partition_column
+            "stdev": polars_df.groupby(partition_column).agg(
+                [
+                    pl.col(c).std().cast(pl.Float64).alias(c)
+                    for c in float_columns + int_columns
+                ]
             ),
-            "num_unique_values": compute_num_unique_values(
-                con, "raw_data", string_columns + int_columns, partition_column
+            "num_unique_values": polars_df.groupby(partition_column).agg(
+                [
+                    pl.col(c).approx_unique().cast(pl.Float64).alias(c)
+                    for c in string_columns + int_columns
+                ]
             ),
-            # "occurrence_ratio": compute_occurrence_ratio(
-            #     con, "raw_data", columns, partition_column
-            # ),
-            "occurrence_ratio": raw_data.groupby(partition_column)
-            .apply(
-                lambda x: x.apply(
-                    lambda y: y.value_counts(normalize=True).iloc[0]
-                )[columns]
-            )
-            .reset_index(),
-            "num_frequent_values": compute_num_frequent_values(
-                con, "raw_data", float_columns + int_columns, partition_column
+            "occurrence_ratio": polars_df.groupby(partition_column).agg(
+                [
+                    (pl.col(c).unique_counts().max())
+                    / (pl.col(c).count()).cast(pl.Float64).alias(c)
+                    for c in string_columns + int_columns
+                ]
+            ),
+            "p95": polars_df.groupby(partition_column).agg(
+                [
+                    pl.col(c).quantile(0.95).cast(pl.Float64).alias(c)
+                    for c in float_columns + int_columns
+                ]
             ),
         }
 
         # Merge the statistics into a single dataframe
         for name, df in statistics.items():
-            df["statistic"] = name
-            statistics[name] = df
+            statistics[name] = df.with_columns(
+                [pl.lit(name).alias("statistic")]
+            )
 
-        current_statistics = pd.concat(statistics.values(), ignore_index=True)
+        current_statistics = pl.concat(
+            list(statistics.values()), how="diagonal"
+        ).to_pandas()
 
-        # Pivot such that columns are the statistics and rows are the row name, and it's grouped by partition col
+        # # Pivot such that columns are the statistics and rows are the row name, and it's grouped by partition col
 
         pivoted = (
             current_statistics.melt(
@@ -147,7 +170,7 @@ class Summary(object):
                 value_vars=columns,
                 var_name="column",
             )
-            .pivot_table(
+            .pivot(
                 index=[partition_column, "column"],
                 columns="statistic",
                 values="value",
@@ -159,7 +182,7 @@ class Summary(object):
         for _, group in pivoted.groupby(partition_column):
             groups.append(
                 cls(
-                    group.reset_index(drop=True).copy(),
+                    group.reset_index(drop=True),
                     string_columns,
                     float_columns,
                     int_columns,
@@ -171,3 +194,30 @@ class Summary(object):
 
     def __str__(self):
         return self.value.to_string()
+
+
+# num_frequent_values = polars_df.groupby(partition_column).agg(
+#     [
+#         pl.col(c)
+#         .apply(
+#             lambda x: np.histogram(x, bins="auto", density=True)[
+#                 0
+#             ].max()
+#         )
+#         .alias(c)
+#         for c in float_columns + int_columns
+#     ]
+# )
+
+# num_frequent_values = pl.DataFrame(
+#     raw_data.groupby(partition_column)
+#     .agg(
+#         {
+#             c: lambda x: np.histogram(x, bins="auto", density=True)[
+#                 0
+#             ].max()
+#             for c in float_columns + int_columns
+#         }
+#     )
+#     .reset_index()
+# )

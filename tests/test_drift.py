@@ -25,24 +25,8 @@ def test_attributes(tiny_df):
     )
     assert len(summary) == 1
 
-    drift_results = detect_drift(summary[-1], summary[:-1])
-
-    assert drift_results.score < 0.01
-    assert len(drift_results.all_scores) > 0
-    assert drift_results.score_percentile
-    assert drift_results.drill_down().sum().values[0] < 0.01
-
-    expected_result = pd.DataFrame(
-        [
-            {"column": "float_col", "statistic": "coverage", "z-score": 0.0},
-            {"column": "int_col", "statistic": "coverage", "z-score": 0.0},
-            {"column": "string_col", "statistic": "coverage", "z-score": 0.0},
-        ]
-    )
-
-    assert (
-        drift_results.drifted_columns().reset_index().equals(expected_result)
-    )
+    with pytest.raises(ValueError):
+        drift_results = detect_drift(summary[-1], summary[:-1])
 
 
 def test_drift(df_with_drift):
