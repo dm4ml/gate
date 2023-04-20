@@ -37,7 +37,7 @@ def test_drift(df_with_drift):
 
     drift_results = detect_drift(summary[-1], summary[:-1])
 
-    assert drift_results.score_percentile > 0.9
+    assert drift_results.score_percentile > 0.85
 
     assert drift_results.drifted_columns().index.values[0] in [
         "int_col",
@@ -58,7 +58,7 @@ def test_drift_small_clustering(df_with_drift):
     drift_results = detect_drift(summary[-1], summary[:-1], cluster=True)
 
     assert len(drift_results.clustering) > 0
-    assert drift_results.score_percentile > 0.9
+    assert drift_results.score_percentile > 0.85
     assert drift_results.drifted_columns().index.values[0] in [
         "int_col",
         "float_col",

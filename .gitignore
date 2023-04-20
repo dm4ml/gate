@@ -3,3 +3,5 @@ examples/data*
 *.pytest_cache*
 canonical-partitioned-dataset*
 *.ipynb_checkpoints*
+dist/*
+site/*

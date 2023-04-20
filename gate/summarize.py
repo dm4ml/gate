@@ -11,8 +11,8 @@ def summarize(
     partition_key: str = "",
     previous_summaries: typing.List[Summary] = [],
 ) -> typing.List[Summary]:
-    """This function computes partition-wise summary statistics for the given
-    columns.
+    """This function computes partition-wide summary statistics for the given
+    columns. df can have multiple partitions.
 
     Args:
         df (pd.DataFrame):
@@ -22,15 +22,28 @@ def summarize(
             subset of df.columns. If empty, previous_summaries must not be
             empty.
         partition_key (str, optional):
-            Column to partition the dataframe by. Must be in df.columns. Can be
-            empty if no partitioning is desired, or if the dataframe represents
-            a single partition. If empty, previous_summaries must not be empty.
+            Name of column to partition the dataframe by. Must be in df.
+            columns. Can be empty if no partitioning is desired, or if the
+            dataframe represents a single partition. If empty,
+            previous_summaries must not be empty.
         previous_summaries (typing.List[Summary], optional):
-            list of Summary objects representing previous partition summaries.
+            List of Summary objects representing previous partition summaries.
 
     Returns:
         typing.List[Summary]:
             List of Summary objects, one per distinct partition found in df.
+
+    Raises:
+        ValueError:
+            If `partition_key` is "group".
+        ValueError:
+            If `columns is empty` and `previous_summaries` is empty.
+        ValueError:
+            If `partition_key `is empty and `previous_summaries` is empty.
+        ValueError:
+            If `partition_key` is not in `df.columns`.
+        ValueError:
+            If any column in `columns` is not in `df.columns`.
     """
     if partition_key == "group":
         raise ValueError("Please rename the partition_key; it cannot be `group`.")

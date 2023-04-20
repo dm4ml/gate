@@ -4,7 +4,7 @@ import pandas as pd
 import polars as pl
 
 
-class Summary(object):
+class Summary:
     def __init__(
         self,
         value: pd.DataFrame,
@@ -22,22 +22,37 @@ class Summary(object):
 
     @property
     def value(self) -> pd.DataFrame:
+        """Dataframe containing the summary statistics."""
         return self._value
 
     @property
     def partition(self) -> str:
+        """Partition key value."""
         return self._partition
 
     @property
     def columns(self) -> typing.List[str]:
+        """Columns for which summary statistics were computed."""
         return self._string_columns + self._float_columns + self._int_columns
 
     @property
     def partition_key(self) -> str:
+        """Partition key column."""
         return self._partition_key
 
-    @property
-    def statistics(self) -> typing.List[str]:
+    @staticmethod
+    def statistics() -> typing.List[str]:
+        """
+        Returns list of statistics computed for each column:
+
+        * coverage: Fraction of rows that are not null.
+        * mean: Mean of the column.
+        * stdev: Standard deviation of the column.
+        * num_unique_values: Number of unique values in the column.
+        * occurrence_ratio: Ratio of the most common value to all other
+        values.
+        * num_frequent_values: Number of values that occur more than once.
+        """
         return [
             "coverage",
             "mean",
@@ -172,7 +187,12 @@ class Summary(object):
             )
         return groups
 
-    def __str__(self):
+    def __str__(self) -> str:
+        """
+        String representation of the object's value (i.e., summary).
+
+        Usage: `print(summary)`
+        """
         return self.value.to_string()
 
 

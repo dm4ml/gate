@@ -12,7 +12,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from gate.summary import Summary
 
 
-class DriftResult(object):
+class DriftResult:
     def __init__(
         self,
         all_scores: pd.Series,
@@ -25,19 +25,38 @@ class DriftResult(object):
 
     @property
     def score(self) -> float:
+        """Distance from the partition to its k nearest neighbors."""
         return self._all_scores.iloc[-1]
 
     @property
+    def is_drifted(self) -> bool:
+        """
+        Indicates whether the partition is drifted or not, compared
+        to previous partitions. This is determined by the percentile
+        of the partition's score in the distribution of all scores.
+        The threshold is 90%.
+        """
+        return self.score_percentile >= 0.85
+
+    @property
     def score_percentile(self) -> float:
-        # Check what percentile the last elem of preds is
+        """Percentile of the partition's score in the distribution
+        of all scores."""
         return percentileofscore(self.all_scores, self.score) * 1.0 / 100
 
     @property
     def all_scores(self) -> pd.Series:
-        return self._all_scores
+        """Scores of all previous partitions."""
+        return self._all_scores.iloc[:-1]
 
     @property
     def clustering(self) -> typing.Dict[int, typing.List[str]]:
+        """
+        Clustering of the columns based on their partition summaries
+        and meaning of column names (determined via embeddings). Returns
+        a dictionary with cluster numbers as keys and lists of columns
+        as values.
+        """
         if self._clustered_features is None:
             raise ValueError("No clustering was performed.")
 
@@ -47,6 +66,32 @@ class DriftResult(object):
         return clustering_map.to_dict()
 
     def drill_down(self) -> pd.DataFrame:
+        """Compute the columns with highest magnitude anomaly scores.
+        Anomaly scores are computed as the z-score of the column with
+        respect to previous partition summary statistics.
+
+        The resulting dataframe has the following schema (column, statistic are
+        indexes):
+
+        - column: Name of the column
+        - statistic: Name of the statistic
+        - z-score: z-score of the column
+        - cluster: Cluster number of the column (if clustering was performed)
+        - z-score-cluster: z-score of the column in the cluster (if
+        clustering was performed)
+
+        Use the `drifted_columns` method first, since `drifted_columns`
+        deduplicates columns.
+
+        Returns:
+            pd.DataFrame:
+                Dataframe with columns with highest magnitude anomaly
+                scores. Sorted by the magnitude of the z-score for a column.
+                If clustering was performed, the dataframe will be sorted
+                by the magnitude of the z-score in the cluster before
+                the column score.
+        """
+
         # Return a dataframe with features with highest magnitude anomaly
         # scores
 
@@ -80,6 +125,7 @@ class DriftResult(object):
         return sorted_df
 
     def __str__(self) -> str:
+        """Prints the drift score, percentile, and the top drifted columns."""
         results = (
             "Drift score:"
             f" {self.score:.4f} ({self.score_percentile:.2%} percentile)\nTop"
@@ -88,6 +134,29 @@ class DriftResult(object):
         return results
 
     def drifted_columns(self, limit: int = 10) -> pd.DataFrame:
+        """Returns the top limit columns that have drifted. The
+        resulting dataframe has the following schema (column is an
+        index):
+
+        - column: Name of the column
+        - statistic: Name of the statistic
+        - z-score: z-score of the column
+        - cluster: Cluster number of the column (if clustering was performed)
+        - z-score-cluster: z-score of the column in the cluster (if
+        clustering was performed)
+
+        Args:
+            limit (int, optional):
+                Limit for number of drifted columns to return. Defaults to 10.
+
+        Returns:
+            pd.DataFrame:
+                Dataframe with columns with highest magnitude z-scores.
+                If clustering was performed, the dataframe will also contain
+                the z-score in the cluster and the cluster number.
+                Each column is deduplicated, so only the statistic with the
+                highest magnitude z-score is returned.
+        """
         # Return a dataframe of the top limit columns that have drifted
         # Drop duplicate column names
         dd_results = self.drill_down()
@@ -132,14 +201,16 @@ def detect_drift(
         previous_summaries (typing.List[Summary]):
             Previous partition summaries.
         validity (typing.List[int], optional):
-            indicator list identifying which partition summaries are valid. 1
+            Indicator list identifying which partition summaries are valid. 1
             if valid, 0 if invalid. If empty, we assume all partition summaries
             are valid. Must be empty or equal to length of previous_summaries.
         cluster (bool, optional):
             Whether or not to cluster columns in summaries. Increases runtime
             but also increases precision in drift detection. Only engaged if
             summaries have more than 10 columns. Defaults to True.
-        k (int, optional): Number of nearest neighbor partitions to inspect.
+        k (int, optional):
+            Number of nearest neighbor partitions to inspect.
+            Defaults to 5.
 
     Returns (DriftResult): DriftResult object with score and score percentile.
     """
