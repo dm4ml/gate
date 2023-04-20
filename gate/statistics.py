@@ -20,7 +20,8 @@ def type_to_statistics(t: str) -> typing.List[str]:
         return [
             "coverage",
             "mean",
-            "stdev",
+            "p50",
+            # "stdev",
             "num_unique_values",
             "occurrence_ratio",
             "p95",
@@ -30,7 +31,8 @@ def type_to_statistics(t: str) -> typing.List[str]:
         return [
             "coverage",
             "mean",
-            "stdev",
+            "p50",
+            # "stdev",
             "p95",
         ]
 

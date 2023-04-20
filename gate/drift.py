@@ -34,9 +34,9 @@ class DriftResult:
         Indicates whether the partition is drifted or not, compared
         to previous partitions. This is determined by the percentile
         of the partition's score in the distribution of all scores.
-        The threshold is 90%.
+        The threshold is 95%.
         """
-        return self.score_percentile >= 0.85
+        return self.score_percentile >= 0.95
 
     @property
     def score_percentile(self) -> float:
@@ -221,7 +221,7 @@ def detect_drift(
 
     partition_key = current_summary.partition_key
     columns = current_summary.columns
-    statistics = current_summary.statistics
+    statistics = current_summary.statistics()
 
     # Create validity vector
     if not validity:

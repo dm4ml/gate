@@ -64,10 +64,10 @@ summaries = summarize(
 print(summaries[-1])
 
 """
-statistic       date      column  coverage       mean  num_unique_values  occurrence_ratio        p95     stdev
-0         2022-01-10   float_col       1.0  -0.005204                NaN               NaN   1.622783  0.995632
-1         2022-01-10     int_col       1.0  14.504000               10.0            0.1051  19.000000  2.891716
-2         2022-01-10  string_col       1.0        NaN                3.0            0.3388        NaN       NaN 
+        date      column  coverage       mean  num_unique_values  occurrence_ratio        p50        p95
+0 2022-01-10   float_col       1.0   0.015739                NaN               NaN   0.019152   1.665352
+1 2022-01-10     int_col       1.0  14.520700               10.0            0.1032  15.000000  19.000000
+2 2022-01-10  string_col       1.0        NaN                3.0            0.3411        NaN        NaN
 """
 ```
 

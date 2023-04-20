@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gate-drift"
-version = "0.1.1"
+version = "0.1.2"
 description = "Data drift detection tool for machine learning pipelines."
 authors = ["Shreya Shankar <shreyashankar@berkeley.edu>"]
 license = "MIT"

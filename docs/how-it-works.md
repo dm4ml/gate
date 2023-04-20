@@ -8,7 +8,7 @@ GATE ingests raw data and computes a _partition summary_ for each partition. A p
 
 - coverage: The fraction of the column that has non-null values.
 - mean: The mean of the column.
-- stdev: The standard deviation of the column.
+- p50: The median of the column.
 - num_unique_values: The number of unique values in the column.
 - occurrence_ratio: The count of the most frequent value divided by the total count.
 - p95: The 95th percentile of the column.

@@ -47,7 +47,7 @@ class Summary:
 
         * coverage: Fraction of rows that are not null.
         * mean: Mean of the column.
-        * stdev: Standard deviation of the column.
+        * p50: Median of the column.
         * num_unique_values: Number of unique values in the column.
         * occurrence_ratio: Ratio of the most common value to all other
         values.
@@ -56,7 +56,8 @@ class Summary:
         return [
             "coverage",
             "mean",
-            "stdev",
+            # "stdev",
+            "p50",
             "num_unique_values",
             "occurrence_ratio",
             # "num_frequent_values",
@@ -122,9 +123,15 @@ class Summary:
             "mean": polars_df.groupby(partition_key).agg(
                 [pl.col(c).mean().alias(c) for c in float_columns + int_columns]
             ),
-            "stdev": polars_df.groupby(partition_key).agg(
+            # "stdev": polars_df.groupby(partition_key).agg(
+            #     [
+            #         pl.col(c).std().cast(pl.Float64).alias(c)
+            #         for c in float_columns + int_columns
+            #     ]
+            # ),
+            "p50": polars_df.groupby(partition_key).agg(
                 [
-                    pl.col(c).std().cast(pl.Float64).alias(c)
+                    pl.col(c).quantile(0.5).cast(pl.Float64).alias(c)
                     for c in float_columns + int_columns
                 ]
             ),
@@ -173,6 +180,7 @@ class Summary:
             )
             .reset_index()
         )
+        pivoted.columns = pivoted.columns.tolist()
 
         groups = []
         for _, group in pivoted.groupby(partition_key):

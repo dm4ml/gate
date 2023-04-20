@@ -26,8 +26,8 @@ def test_summarize(tiny_df):
                 "mean": 0.10000000000000002,
                 "num_unique_values": np.nan,
                 "occurrence_ratio": np.nan,
+                "p50": 0.1,
                 "p95": 0.2,
-                "stdev": 0.1,
             },
             {
                 "grp": "A",
@@ -36,8 +36,8 @@ def test_summarize(tiny_df):
                 "mean": 0.5,
                 "num_unique_values": np.nan,
                 "occurrence_ratio": np.nan,
+                "p50": 1.0,
                 "p95": 1.0,
-                "stdev": 0.7071067811865476,
             },
             {
                 "grp": "A",
@@ -46,8 +46,8 @@ def test_summarize(tiny_df):
                 "mean": np.nan,
                 "num_unique_values": 2.0,
                 "occurrence_ratio": 0.6666666666666666,
+                "p50": np.nan,
                 "p95": np.nan,
-                "stdev": np.nan,
             },
         ]
     )
