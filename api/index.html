@@ -961,7 +961,7 @@ List of Summary objects, one per distinct partition found in df.</p></td>
 <ul>
 <li>coverage: Fraction of rows that are not null.</li>
 <li>mean: Mean of the column.</li>
-<li>stdev: Standard deviation of the column.</li>
+<li>p50: Median of the column.</li>
 <li>num_unique_values: Number of unique values in the column.</li>
 <li>occurrence_ratio: Ratio of the most common value to all other
 values.</li>
@@ -1159,7 +1159,7 @@ Defaults to 5.</p></td>
       <p>Indicates whether the partition is drifted or not, compared
 to previous partitions. This is determined by the percentile
 of the partition's score in the distribution of all scores.
-The threshold is 90%.</p>
+The threshold is 95%.</p>
   </div>
 
 </div>
