@@ -108,7 +108,7 @@ class Summary:
 
         # Convert to polars and melt
         polars_df = pl.DataFrame(raw_data)
-        polars_df[partition_key].n_unique()
+        # polars_df[partition_key].n_unique()
         # .melt(
         #     id_vars=[partition_key],
         #     value_vars=columns,
@@ -116,53 +116,63 @@ class Summary:
         #     value_name="value",
         # )
 
-        statistics = {
-            "coverage": polars_df.groupby(partition_key).agg(
-                [pl.col(c).is_not_null().mean().alias(c) for c in columns]
-            ),
-            "mean": polars_df.groupby(partition_key).agg(
-                [pl.col(c).mean().alias(c) for c in float_columns + int_columns]
-            ),
-            # "stdev": polars_df.groupby(partition_key).agg(
-            #     [
-            #         pl.col(c).std().cast(pl.Float64).alias(c)
-            #         for c in float_columns + int_columns
-            #     ]
-            # ),
-            "p50": polars_df.groupby(partition_key).agg(
+        statistics = [
+            polars_df.groupby(partition_key)
+            .agg(
+                [
+                    pl.col(c).is_not_null().cast(pl.Float64).mean().alias(c)
+                    for c in columns
+                ]
+            )
+            .with_columns([pl.lit("coverage").alias("statistic")]),
+            polars_df.groupby(partition_key)
+            .agg([pl.col(c).mean().alias(c) for c in float_columns + int_columns])
+            .with_columns([pl.lit("mean").alias("statistic")]),
+            polars_df.groupby(partition_key)
+            .agg(
                 [
                     pl.col(c).quantile(0.5).cast(pl.Float64).alias(c)
                     for c in float_columns + int_columns
                 ]
-            ),
-            "num_unique_values": polars_df.groupby(partition_key).agg(
+            )
+            .with_columns([pl.lit("p50").alias("statistic")]),
+            polars_df.groupby(partition_key)
+            .agg(
                 [
                     pl.col(c).approx_unique().cast(pl.Float64).alias(c)
                     for c in string_columns + int_columns
                 ]
-            ),
-            "occurrence_ratio": polars_df.groupby(partition_key).agg(
+            )
+            .with_columns([pl.lit("num_unique_values").alias("statistic")]),
+            polars_df.groupby(partition_key)
+            .agg(
                 [
                     (pl.col(c).unique_counts().max())
                     / (pl.col(c).count()).cast(pl.Float64).alias(c)
                     for c in string_columns + int_columns
                 ]
-            ),
-            "p95": polars_df.groupby(partition_key).agg(
+            )
+            .with_columns([pl.lit("occurrence_ratio").alias("statistic")]),
+            polars_df.groupby(partition_key)
+            .agg(
                 [
                     pl.col(c).quantile(0.95).cast(pl.Float64).alias(c)
                     for c in float_columns + int_columns
                 ]
-            ),
-        }
+            )
+            .with_columns([pl.lit("p95").alias("statistic")]),
+        ]
+
+        # for s in statistics:
+        #     print(s.collect().to_pandas())
 
         # Merge the statistics into a single dataframe
-        for name, df in statistics.items():
-            statistics[name] = df.with_columns([pl.lit(name).alias("statistic")])
+        # for name, df in statistics.items():
+        #     statistics[name] = df.with_columns(
+        #         [pl.lit(name).alias("statistic")]
+        #     )
 
-        current_statistics = pl.concat(
-            list(statistics.values()), how="diagonal"
-        ).to_pandas()
+        current_statistics = pl.concat(statistics, how="diagonal").to_pandas()
 
         # Pivot such that columns are the statistics and rows are the row name,
         # and it's grouped by partition col
@@ -180,6 +190,7 @@ class Summary:
             )
             .reset_index()
         )
+
         pivoted.columns = pivoted.columns.tolist()
 
         groups = []
