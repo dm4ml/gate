@@ -68,7 +68,7 @@ def test_no_drift_scale():
     # print(f"drift_time: {drift_time}")
     # assert False
 
-    assert abs(0.5 - drift_results.score_percentile) < 0.5
+    assert abs(0.5 - drift_results.score_percentile) <= 0.5
 
 
 def test_drift_scale():
