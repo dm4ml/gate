@@ -28,6 +28,7 @@ mkdocstrings = "^0.21.2"
 pytkdocs = "^0.16.1"
 linkchecker = "^10.2.1"
 mkdocstrings-python = "^0.9.0"
+pytest-rerunfailures = "^11.1.2"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

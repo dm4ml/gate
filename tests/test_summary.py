@@ -11,7 +11,7 @@ def test_summarize(tiny_df):
         columns=["string_col", "int_col", "float_col"],
     )
     assert len(summary) == 1
-    summary = summary[0].value
+    summary = summary[0].summary
 
     assert len(summary) == 3
 

@@ -18,10 +18,12 @@ class DriftResult:
         all_scores: pd.Series,
         nn_features: pd.DataFrame,
         clustered_features: pd.DataFrame,
+        embedding_columns: typing.List[str],
     ) -> None:
         self._all_scores = all_scores
         self._nn_features = nn_features
         self._clustered_features = clustered_features
+        self._embedding_columns = embedding_columns
 
     @property
     def score(self) -> float:
@@ -65,7 +67,11 @@ class DriftResult:
 
         return clustering_map.to_dict()
 
-    def drill_down(self) -> pd.DataFrame:
+    def drill_down(
+        self,
+        sort_by_cluster_score: bool = False,
+        average_embedding_columns: bool = True,
+    ) -> pd.DataFrame:
         """Compute the columns with highest magnitude anomaly scores.
         Anomaly scores are computed as the z-score of the column with
         respect to previous partition summary statistics.
@@ -82,6 +88,13 @@ class DriftResult:
 
         Use the `drifted_columns` method first, since `drifted_columns`
         deduplicates columns.
+
+        Args:
+            sort_by_cluster_score (bool, optional):
+                Whether to sort by cluster z-score. Defaults to False.
+            average_embedding_columns (bool, optional):
+                Whether to average statistics across embedding dimensions.
+                Defaults to True.
 
         Returns:
             pd.DataFrame:
@@ -114,13 +127,23 @@ class DriftResult:
             )
 
             # Sort again
-            sorted_df = sorted_df.reindex(
-                sorted_df[["z-score-cluster", "z-score"]]
-                .abs()
-                .sort_values(by=["z-score-cluster", "z-score"], ascending=False)
-                .index
+            if sort_by_cluster_score:
+                sorted_df = sorted_df.reindex(
+                    sorted_df[["z-score-cluster", "z-score"]]
+                    .abs()
+                    .sort_values(by=["z-score-cluster", "z-score"], ascending=False)
+                    .index
+                )
+                sorted_df.set_index(["column", "statistic"], inplace=True)
+
+        if len(self._embedding_columns) > 0 and average_embedding_columns:
+            # Average the z-scores
+            sorted_df.reset_index(inplace=True)
+            sorted_df["column"] = sorted_df["column"].apply(
+                lambda x: name_to_ec(x, self._embedding_columns)
             )
-            sorted_df.set_index(["column", "statistic"], inplace=True)
+            sorted_df = sorted_df.groupby(["column", "statistic"]).mean()
+            sorted_df.sort_values(by="z-score", ascending=False, inplace=True)
 
         return sorted_df
 
@@ -133,7 +156,11 @@ class DriftResult:
         )
         return results
 
-    def drifted_columns(self, limit: int = 10) -> pd.DataFrame:
+    def drifted_columns(
+        self,
+        limit: int = 10,
+        average_embedding_columns: bool = True,
+    ) -> pd.DataFrame:
         """Returns the top limit columns that have drifted. The
         resulting dataframe has the following schema (column is an
         index):
@@ -148,6 +175,9 @@ class DriftResult:
         Args:
             limit (int, optional):
                 Limit for number of drifted columns to return. Defaults to 10.
+            average_embedding_columns (bool, optional):
+                Whether to average statistics across embedding dimensions.
+                Defaults to True.
 
         Returns:
             pd.DataFrame:
@@ -159,12 +189,12 @@ class DriftResult:
         """
         # Return a dataframe of the top limit columns that have drifted
         # Drop duplicate column names
-        dd_results = self.drill_down()
+        dd_results = self.drill_down(average_embedding_columns)
 
         if self._clustered_features is not None:
             # Sort by z-score first, then z-score-cluster
             dd_results = dd_results.reindex(
-                dd_results[["z-score-cluster", "z-score"]]
+                dd_results[["z-score", "z-score-cluster"]]
                 .abs()
                 .sort_values(by=["z-score", "z-score-cluster"], ascending=False)
                 .index
@@ -183,6 +213,26 @@ class DriftResult:
             dd_results = dd_results[dd_results["z-score-cluster"].abs() > 0.0]
 
         return dd_results.head(limit)
+
+
+def name_to_ec(name: str, embedding_columns: typing.List[str]) -> str:
+    """Converts a column name to an embedding column name.
+
+    Args:
+        name (str):
+            Column name.
+        embedding_columns (typing.List[str]):
+            List of embedding columns.
+
+    Returns:
+        str:
+            Embedding column name.
+    """
+    split_name = name.rsplit("_", 1)[0]
+    if split_name in embedding_columns:
+        return split_name
+    else:
+        return name
 
 
 def detect_drift(
@@ -214,9 +264,11 @@ def detect_drift(
 
     Returns (DriftResult): DriftResult object with score and score percentile.
     """
-    if len(previous_summaries) == 0:
+    if len(previous_summaries) < 5:
         raise ValueError(
-            "You must have at least 1 previous partition summary to detect drift."
+            "You must have at least 5 previous partition summary to detect"
+            " drift. You can randomly split your data from previous partitions"
+            " into 5+ partitions if you need to."
         )
 
     partition_key = current_summary.partition_key
@@ -233,42 +285,31 @@ def detect_drift(
         )
     validity.append(1)
 
-    prev_summaries = [
-        s.value for i, s in enumerate(previous_summaries) if validity[i] == 1
-    ]
-
     # Normalize current and previous partition summaries
-    all_summaries = pd.concat(prev_summaries + [current_summary.value]).reset_index(
-        drop=True
+    prev_summaries = [
+        s.value() for i, s in enumerate(previous_summaries) if validity[i] == 1
+    ]
+    normalized_summaries = normalize(
+        pd.concat(prev_summaries + [current_summary.value()]).reset_index(drop=True),
+        partition_key,
+        statistics,
     )
-
-    normalized = all_summaries.melt(
-        id_vars=[partition_key, "column"],
-        value_vars=statistics,
-        var_name="statistic",
-        value_name="value",
-    ).dropna()
-
-    grouped = normalized.groupby(["column", "statistic"])
-    mean = grouped["value"].transform("mean")
-    std = grouped["value"].transform("std")
-    std += 1e-10
-    normalized["value"] = (normalized["value"] - mean) / std
 
     # Run clustering algorithm if there are more than 10 columns
     if cluster and len(columns) >= 10:
         clustering = compute_clusters(
-            normalized,
+            normalized_summaries,
             partition_key,
             current_summary._string_columns,
             current_summary._float_columns,
             current_summary._int_columns,
+            current_summary._embedding_columns,
         )
 
-        normalized["value_abs"] = normalized["value"].abs()
+        normalized_summaries["value_abs"] = normalized_summaries["value"].abs()
 
         cluster_normalized = (
-            normalized.merge(clustering, on=["column"], how="left")
+            normalized_summaries.merge(clustering, on=["column"], how="left")
             # .set_index(partition_key)
             .groupby([partition_key, "cluster", "statistic"])["value_abs"]
             .mean()
@@ -277,11 +318,11 @@ def detect_drift(
         cluster_normalized.rename(
             {"cluster": "column", "value_abs": "value"}, axis=1, inplace=True
         )
-        normalized.drop("value_abs", axis=1, inplace=True)
+        normalized_summaries.drop("value_abs", axis=1, inplace=True)
 
     # Run nearest neighbor algorithm to get distances
     nn_features_unpivoted = (
-        cluster_normalized if (cluster and len(columns) >= 10) else normalized
+        cluster_normalized if (cluster and len(columns) >= 10) else normalized_summaries
     )
     # nn_features_unpivoted["value"] = nn_features_unpivoted["value"].apply(
     #     lambda x: 0.0 if np.abs(x) < z_score_cutoff else x
@@ -309,8 +350,8 @@ def detect_drift(
 
     if cluster and len(columns) >= 10:
         partition_value = scores.index[-1]
-        clustered_features = normalized[
-            normalized[partition_key] == partition_value
+        clustered_features = normalized_summaries[
+            normalized_summaries[partition_key] == partition_value
         ].merge(clustering, on=["column"], how="left")
 
         clustered_features.rename({"value": "z-score"}, axis=1, inplace=True)
@@ -320,10 +361,46 @@ def detect_drift(
             scores,
             nn_features,
             clustered_features=clustered_features,
+            embedding_columns=current_summary._embedding_columns,
         )
 
     else:
-        return DriftResult(scores, nn_features, clustered_features=None)
+        return DriftResult(
+            scores,
+            nn_features,
+            clustered_features=None,
+            embedding_columns=current_summary._embedding_columns,
+        )
+
+
+def normalize(
+    all_summaries: pd.DataFrame,
+    partition_key: str,
+    statistics: typing.List[str],
+) -> pd.DataFrame:
+    """Melt and normalize partition summaries.
+
+    Args:
+        all_summaries (pd.DataFrame): concatenated summaries to normalize
+        partition_key (str): partition key
+        statistics (typing.List[str]): statistics to normalize
+
+    Returns:
+        pd.DataFrame: normalized summary
+    """
+    normalized = all_summaries.melt(
+        id_vars=[partition_key, "column"],
+        value_vars=statistics,
+        var_name="statistic",
+        value_name="value",
+    ).dropna()
+
+    grouped = normalized.groupby(["column", "statistic"])
+    mean = grouped["value"].transform("mean")
+    std = grouped["value"].transform("std")
+    std += 1e-10
+    normalized["value"] = (normalized["value"] - mean) / std
+    return normalized
 
 
 def compute_clusters(
@@ -332,6 +409,7 @@ def compute_clusters(
     string_columns: typing.List[str],
     float_columns: typing.List[str],
     int_columns: typing.List[str],
+    embedding_columns: typing.List[str],
 ) -> pd.DataFrame:
     """Computes clusters of columns in a partition summary.
 
@@ -341,6 +419,7 @@ def compute_clusters(
         string_columns (typing.List[str]): List of string columns.
         float_columns (typing.List[str]): List of float columns.
         int_columns (typing.List[str]): List of int columns.
+        embedding_columns (typing.List[str]): List of embedding columns.
 
     Returns (pd.DataFrame): Mapping of column names to cluster numbers.
     """
@@ -349,10 +428,18 @@ def compute_clusters(
         index="column", columns=[partition_key, "statistic"], values="value"
     ).fillna(0.0)
 
-    column_names = column_stats.index.values
+    column_names = column_stats.index.tolist()
     column_names_to_types = {c: "string" for c in string_columns}
     column_names_to_types.update({c: "float" for c in float_columns})
     column_names_to_types.update({c: "int" for c in int_columns})
+    embedding_columns_with_indexes = [
+        c for c in column_names if name_to_ec(c, embedding_columns) in embedding_columns
+    ]
+    # column_names_to_types.update(
+    #     {c: "embedding" for c in embedding_columns_with_indexes}
+    # )
+    for embedding_col_name in embedding_columns_with_indexes:
+        column_names.remove(embedding_col_name)
 
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
     embeddings = model.encode(
@@ -360,7 +447,9 @@ def compute_clusters(
     )
 
     embedding_similarity_matrix = cosine_similarity(embeddings)
-    value_similarity_matrix = cosine_similarity(column_stats.values)
+    value_similarity_matrix = cosine_similarity(
+        column_stats[column_stats.index.isin(column_names)].values
+    )
     similarity_matrix = (
         0.25 * embedding_similarity_matrix + 0.75 * value_similarity_matrix
     )
@@ -390,9 +479,19 @@ def compute_clusters(
     clusters = {}
     for i, label in enumerate(cluster_labels):
         clusters[column_names[i]] = label
+    max_label = max(cluster_labels)
 
-    return (
+    # Add embedding columns to clusters
+    for i, embedding_col_name in enumerate(embedding_columns):
+        for name in column_stats.index.tolist():
+            if name_to_ec(name, embedding_columns) == embedding_col_name:
+                clusters[name] = max_label + i + 1
+
+    cluster_df = (
         pd.DataFrame.from_dict(clusters, orient="index", columns=["cluster"])
         .reset_index()
         .rename(columns={"index": "column"})
     )
+    # cluster_df["cluster"] = cluster_df["cluster"].astype(str)
+
+    return cluster_df
