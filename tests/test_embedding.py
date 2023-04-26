@@ -4,7 +4,7 @@ import pytest
 from gate import summarize, detect_drift
 
 
-@pytest.mark.flaky(reruns=1)
+# @pytest.mark.flaky(reruns=1)
 def test_summarize_embedding_tiny():
     embedding_list = [np.random.rand(3) for _ in range(100)]
 
@@ -27,7 +27,7 @@ def test_summarize_embedding_tiny():
     assert not drift_results.is_drifted
 
 
-@pytest.mark.flaky(reruns=1)
+# @pytest.mark.flaky(reruns=1)
 def test_summarize_embedding_medium():
     embedding_list = [np.random.rand(100) for _ in range(100)]
 
@@ -50,7 +50,7 @@ def test_summarize_embedding_medium():
     assert not drift_results.is_drifted
 
 
-@pytest.mark.flaky(reruns=1)
+# @pytest.mark.flaky(reruns=1)
 def test_summarize_embedding_big_with_drift():
     embedding_list = [np.random.rand(2048) for _ in range(1000)]
     date_range = pd.date_range(start="2022-01-01", periods=10, freq="D")
