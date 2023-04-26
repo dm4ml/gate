@@ -5,7 +5,7 @@ def type_to_statistics(t: str) -> typing.List[str]:
     """Returns the statistics that are computed for a given type.
 
     Args:
-        t (str): Type (one of "int", "float", "string").
+        t (str): Type (one of "int", "float", "string", "embedding").
 
     Returns:
         typing.List[str]:
@@ -38,5 +38,8 @@ def type_to_statistics(t: str) -> typing.List[str]:
 
     if t == "string":
         return ["coverage", "num_unique_values", "occurrence_ratio"]
+
+    if t == "embedding":
+        return ["coverage", "mean", "p50", "p95"]
 
     raise ValueError(f"Unknown type {t}")

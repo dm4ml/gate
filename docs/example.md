@@ -73,7 +73,7 @@ print(summaries[-1])
 
 !!! note
 
-    You can access the summary data as a Pandas dataframe with the `value` attribute of the [`Summary`](/gate/api/#gate.summary.Summary) object (i.e., `summaries[-1].value`).
+    You can access the summary data as a Pandas dataframe with the `value` attribute of the [`Summary`](/gate/api/#gate.summary.Summary) object (i.e., `summaries[-1].summary`).
 
 ## [`detect_drift`](/gate/api/#gate.drift.detect_drift)
 
