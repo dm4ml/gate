@@ -4,7 +4,7 @@ test:
 	poetry run pytest
 
 lint:
-	ruff .
+	ruff . --fix
 
 docs:
 	mkdocs gh-deploy --force

@@ -3,6 +3,7 @@
     options:
       members:
         - summarize
+        - compute_embeddings
       show_root_full_path: false
       show_root_toc_entry: false
       show_root_heading: false
@@ -12,11 +13,16 @@
     handler: python
     options:
       members:
-        - value
+        - summary
+        - embeddings_summary
         - partition_key
         - partition
         - columns
+        - non_embedding_columns
+        - embedding_examples
+        - embedding_centroids
         - statistics
+        - value
         - __str__
       show_root_full_path: false
       show_root_toc_entry: false
@@ -37,9 +43,12 @@
     handler: python
     options:
       members:
-        - is_drifted
+        - summary
+        - neighbor_summaries
+        - drifted_examples
         - score
         - score_percentile
+        - is_drifted
         - all_scores
         - clustering
         - drill_down

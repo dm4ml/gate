@@ -48,3 +48,4 @@ Differences from the original implementation include:
 - Removal of the Wasserstein-1 distance and num_frequent_values metrics, which are time-consuming to compute and not as useful as other metrics.
 - Addition of the p95 metric.
 - Embeddings of column names and types in the clustering algorithm (in addition to partition summaries).
+- Support for drift detection on embedding columns and computing drifted clusters.

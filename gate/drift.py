@@ -17,18 +17,91 @@ class DriftResult:
         self,
         all_scores: pd.Series,
         nn_features: pd.DataFrame,
+        summary: Summary,
+        neighbor_summaries: typing.List[Summary],
         clustered_features: pd.DataFrame,
         embedding_columns: typing.List[str],
     ) -> None:
         self._all_scores = all_scores
         self._nn_features = nn_features
+        self._summary = summary
+        self._neighbor_summaries = neighbor_summaries
         self._clustered_features = clustered_features
         self._embedding_columns = embedding_columns
 
     @property
+    def summary(self) -> Summary:
+        """Summary of the partition."""
+        return self._summary
+
+    @property
+    def neighbor_summaries(self) -> typing.List[Summary]:
+        """Summaries of the nearest neighbors of the partition."""
+        return self._neighbor_summaries
+
+    def drifted_examples(
+        self, embedding_key_column: str
+    ) -> typing.Dict[str, pd.DataFrame]:
+        """Returns some examples from the partition that are
+        most drifted from nearest neighbors in the embedding space
+        in previous partitions.
+
+        Throws an error if the embedding_key_column isn't a valid
+        embedding key column, or if there are no embedding columns.
+
+        Args:
+            embedding_key_column (str):
+                Column that represents the embedding key (e.g., text, image).
+
+        Returns:
+            typing.Dict[str, pd.DataFrame]:
+                Dictionary with two keys: "drifted_examples" and
+                "corresponding_examples". The value of each key is a
+                dataframe with columns "partition_key", "embedding_key_column",
+                and "embedding_value_column".
+        """
+        all_centroids = np.vstack(
+            [
+                s.embedding_centroids(embedding_key_column)
+                for s in self.neighbor_summaries
+            ]
+        )
+        all_centroid_idxs = [
+            (i, j)
+            for i in range(len(self.neighbor_summaries))
+            for j in range(
+                len(
+                    self.neighbor_summaries[i].embedding_centroids(embedding_key_column)
+                )
+            )
+        ]
+        curr_centroids = self.summary.embedding_centroids(embedding_key_column)
+
+        # Compute similarity
+        similarity_matrix = cosine_similarity(curr_centroids, all_centroids)
+        most_dissimilar_row_idx = np.argmax(np.min(similarity_matrix, axis=1))
+        dissimilar_examples = self.summary.embedding_examples(embedding_key_column)
+        dissimilar_examples = dissimilar_examples[
+            dissimilar_examples["cluster"] == most_dissimilar_row_idx
+        ].reset_index(drop=True)
+        corresponding_row_idx = np.argmin(similarity_matrix[most_dissimilar_row_idx])
+        corresponding_examples = self.neighbor_summaries[
+            all_centroid_idxs[corresponding_row_idx][0]
+        ].embedding_examples(embedding_key_column)
+        corresponding_examples = corresponding_examples[
+            corresponding_examples["cluster"]
+            == all_centroid_idxs[corresponding_row_idx][1]
+        ].reset_index(drop=True)
+
+        return {
+            "drifted_examples": dissimilar_examples.drop("cluster", axis=1),
+            "corresponding_examples": corresponding_examples.drop("cluster", axis=1),
+        }
+
+    @property
     def score(self) -> float:
         """Distance from the partition to its k nearest neighbors."""
-        return self._all_scores.iloc[-1]
+        return self._all_scores[self.summary.partition]
 
     @property
     def is_drifted(self) -> bool:
@@ -49,7 +122,8 @@ class DriftResult:
     @property
     def all_scores(self) -> pd.Series:
         """Scores of all previous partitions."""
-        return self._all_scores.iloc[:-1]
+        mask = self._all_scores.index != self.summary.partition
+        return self._all_scores[mask]
 
     @property
     def clustering(self) -> typing.Dict[int, typing.List[str]]:
@@ -107,8 +181,7 @@ class DriftResult:
 
         # Return a dataframe with features with highest magnitude anomaly
         # scores
-
-        last_day = self._nn_features.iloc[-1]
+        last_day = self._nn_features.loc[self.summary.partition]
         sorted_cols = last_day.abs().sort_values(ascending=False).index
         sorted_df = last_day[sorted_cols].to_frame()
         sorted_df.rename(columns={sorted_df.columns[0]: "z-score"}, inplace=True)
@@ -142,8 +215,20 @@ class DriftResult:
             sorted_df["column"] = sorted_df["column"].apply(
                 lambda x: name_to_ec(x, self._embedding_columns)
             )
+            sorted_df["z-score"] = sorted_df.apply(
+                lambda x: (
+                    abs(x["z-score"])
+                    if x["column"] in self._embedding_columns
+                    else x["z-score"]
+                ),
+                axis=1,
+            )
             sorted_df = sorted_df.groupby(["column", "statistic"]).mean()
-            sorted_df.sort_values(by="z-score", ascending=False, inplace=True)
+            sorted_df = sorted_df.reindex(
+                sorted_df["z-score"].abs().sort_values(ascending=False).index
+            )
+
+            # sorted_df.sort_values(by="z-score", ascending=False, inplace=True)
 
         return sorted_df
 
@@ -228,6 +313,8 @@ def name_to_ec(name: str, embedding_columns: typing.List[str]) -> str:
         str:
             Embedding column name.
     """
+    if type(name) != str:
+        print(name)
     split_name = name.rsplit("_", 1)[0]
     if split_name in embedding_columns:
         return split_name
@@ -240,7 +327,7 @@ def detect_drift(
     previous_summaries: typing.List[Summary],
     validity: typing.List[int] = [],
     cluster: bool = True,
-    k: int = 5,
+    k: int = 3,
 ) -> DriftResult:
     """Computes whether the current partition summary has drifted from previous
     summaries.
@@ -260,7 +347,7 @@ def detect_drift(
             summaries have more than 10 columns. Defaults to True.
         k (int, optional):
             Number of nearest neighbor partitions to inspect.
-            Defaults to 5.
+            Defaults to 3.
 
     Returns (DriftResult): DriftResult object with score and score percentile.
     """
@@ -338,7 +425,12 @@ def detect_drift(
         .fillna(0.0)
     )
 
-    dists, _ = cKDTree(nn_features.values).query(nn_features.values, k=k + 1)
+    dists, indices = cKDTree(nn_features.values).query(nn_features.values, k=k + 1)
+
+    neighbor_partitions = nn_features.index[indices[-1][1:]].to_list()
+    neighbor_summaries = [
+        s for s in previous_summaries if s.partition in neighbor_partitions
+    ]
 
     # Replace inf with nan
     dists[np.isinf(dists)] = np.nan
@@ -360,6 +452,8 @@ def detect_drift(
         return DriftResult(
             scores,
             nn_features,
+            current_summary,
+            neighbor_summaries=neighbor_summaries,
             clustered_features=clustered_features,
             embedding_columns=current_summary._embedding_columns,
         )
@@ -368,6 +462,8 @@ def detect_drift(
         return DriftResult(
             scores,
             nn_features,
+            current_summary,
+            neighbor_summaries=neighbor_summaries,
             clustered_features=None,
             embedding_columns=current_summary._embedding_columns,
         )
@@ -441,7 +537,7 @@ def compute_clusters(
     for embedding_col_name in embedding_columns_with_indexes:
         column_names.remove(embedding_col_name)
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    model = SentenceTransformer("clip-ViT-B-32")
     embeddings = model.encode(
         [f"{c} is of type {column_names_to_types[c]}" for c in column_names]
     )

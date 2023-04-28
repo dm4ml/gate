@@ -6,6 +6,7 @@ remote_branch: gh-pages
 nav:
   - Home: index.md
   - Example: example.md
+  - Embeddings: embedding.md
   - API Reference: api.md
   - How it Works: how-it-works.md
 
@@ -52,8 +53,14 @@ theme:
     - navigation.tracking
     - navigation.expand
     - navigation.path
+    - navigation.prune
+    - navigation.indexes
+    - navigation.top
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
     - toc.follow
-    - header.autohide
+    - toc.integrate
     - content.code.copy
     - content.code.annotate
 
