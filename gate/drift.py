@@ -156,9 +156,10 @@ class DriftResult:
         - column: Name of the column
         - statistic: Name of the statistic
         - z-score: z-score of the column
-        - cluster: Cluster number of the column (if clustering was performed)
-        - z-score-cluster: z-score of the column in the cluster (if
-        clustering was performed)
+        - cluster: Cluster number that the column belongs to (if clustering was
+        performed)
+        - abs(z-score-cluster): absolute value of the average z-score of the
+        column in the cluster (if clustering was performed)
 
         Use the `drifted_columns` method first, since `drifted_columns`
         deduplicates columns.
@@ -191,7 +192,7 @@ class DriftResult:
             # Join the clustered features with the sorted_df
             # sorted_df.rename(index={"column": "cluster"}, inplace=True)
             sorted_df = sorted_df.rename_axis(["cluster", "statistic"]).reset_index()
-            sorted_df.rename(columns={"z-score": "z-score-cluster"}, inplace=True)
+            sorted_df.rename(columns={"z-score": "abs(z-score-cluster)"}, inplace=True)
 
             sorted_df = sorted_df.merge(
                 self._clustered_features,
@@ -202,9 +203,11 @@ class DriftResult:
             # Sort again
             if sort_by_cluster_score:
                 sorted_df = sorted_df.reindex(
-                    sorted_df[["z-score-cluster", "z-score"]]
+                    sorted_df[["abs(z-score-cluster)", "z-score"]]
                     .abs()
-                    .sort_values(by=["z-score-cluster", "z-score"], ascending=False)
+                    .sort_values(
+                        by=["abs(z-score-cluster)", "z-score"], ascending=False
+                    )
                     .index
                 )
                 sorted_df.set_index(["column", "statistic"], inplace=True)
@@ -254,7 +257,7 @@ class DriftResult:
         - statistic: Name of the statistic
         - z-score: z-score of the column
         - cluster: Cluster number of the column (if clustering was performed)
-        - z-score-cluster: z-score of the column in the cluster (if
+        - abs(z-score-cluster): z-score of the column in the cluster (if
         clustering was performed)
 
         Args:
@@ -277,11 +280,11 @@ class DriftResult:
         dd_results = self.drill_down(average_embedding_columns)
 
         if self._clustered_features is not None:
-            # Sort by z-score first, then z-score-cluster
+            # Sort by z-score first, then abs(z-score-cluster)
             dd_results = dd_results.reindex(
-                dd_results[["z-score", "z-score-cluster"]]
+                dd_results[["z-score", "abs(z-score-cluster)"]]
                 .abs()
-                .sort_values(by=["z-score", "z-score-cluster"], ascending=False)
+                .sort_values(by=["z-score", "abs(z-score-cluster)"], ascending=False)
                 .index
             )
 
@@ -293,9 +296,9 @@ class DriftResult:
         if self._clustered_features is not None:
             # Reorder columns
             dd_results = dd_results[
-                ["statistic", "z-score", "cluster", "z-score-cluster"]
+                ["statistic", "z-score", "cluster", "abs(z-score-cluster)"]
             ]
-            dd_results = dd_results[dd_results["z-score-cluster"].abs() > 0.0]
+            dd_results = dd_results[dd_results["abs(z-score-cluster)"].abs() > 0.0]
 
         return dd_results.head(limit)
 
