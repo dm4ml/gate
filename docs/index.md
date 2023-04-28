@@ -1,5 +1,9 @@
 GATE is a Python module that detects drift in partitions of data. GATE computes partition _summaries_, which are then fed into an anomaly detection algorithm to detect whether a new partition is anomalous. This minimizes false positive alerts when detecting drift in machine learning (ML) pipelines, where there may be many features and prediction columns.
 
+!!! tip "Support for Embeddings"
+
+    We now support drift detection on embeddings, in addition to structured data. GATE considers _both_ the structured data and the embeddings when computing partition summaries and detecting drift. Check out the [embeddings page](./embedding) for a walkthrough of how to use GATE with embeddings.
+
 ## Installation
 
 GATE is available on PyPI and can be installed with pip:
@@ -7,6 +11,8 @@ GATE is available on PyPI and can be installed with pip:
 ```bash
 pip install gate-drift
 ```
+
+Note that GATE requires Python 3.8 or higher.
 
 ## Usage
 

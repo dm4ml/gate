@@ -53,8 +53,14 @@ theme:
     - navigation.tracking
     - navigation.expand
     - navigation.path
+    - navigation.prune
+    - navigation.indexes
+    - navigation.top
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
     - toc.follow
-    - header.autohide
+    - toc.integrate
     - content.code.copy
     - content.code.annotate
 
