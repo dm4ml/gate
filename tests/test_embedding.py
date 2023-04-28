@@ -8,7 +8,7 @@ import pytest
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 
 
-@pytest.mark.flaky(reruns=1)
+@pytest.mark.flaky(reruns=2)
 def test_summarize_embedding_tiny():
     embedding_list = [np.random.rand(3) for _ in range(100)]
 
@@ -31,7 +31,7 @@ def test_summarize_embedding_tiny():
     assert not drift_results.is_drifted
 
 
-@pytest.mark.flaky(reruns=1)
+@pytest.mark.flaky(reruns=2)
 def test_summarize_embedding_medium():
     embedding_list = [np.random.rand(100) for _ in range(100)]
 
@@ -54,7 +54,7 @@ def test_summarize_embedding_medium():
     assert not drift_results.is_drifted
 
 
-@pytest.mark.flaky(reruns=1)
+@pytest.mark.flaky(reruns=2)
 def test_summarize_embedding_big_with_drift():
     embedding_list = [np.random.rand(2048) for _ in range(1000)]
     date_range = pd.date_range(start="2022-01-01", periods=10, freq="D")
@@ -218,58 +218,3 @@ def test_clustering_with_drift():
     assert (
         "embedding" in drift_results.drifted_columns().head(2).index.tolist()
     )
-
-
-[
-    "rating",
-    "funny",
-    "wow",
-    "sad",
-    "likes",
-    "disagree",
-    "toxicity",
-    "severe_toxicity",
-    "obscene",
-    "sexual_explicit",
-    "identity_attack",
-    "insult",
-    "threat",
-    "male",
-    "female",
-    "transgender",
-    "other_gender",
-    "heterosexual",
-    "homosexual_gay_or_lesbian",
-    "bisexual",
-    "other_sexual_orientation",
-    "christian",
-    "jewish",
-    "muslim",
-    "hindu",
-    "buddhist",
-    "atheist",
-    "other_religion",
-    "black",
-    "white",
-    "asian",
-    "latino",
-    "other_race_or_ethnicity",
-    "physical_disability",
-    "intellectual_or_learning_disability",
-    "psychiatric_or_mental_illness",
-    "other_disability",
-    "identity_annotator_count",
-    "toxicity_annotator_count",
-    "LGBTQ",
-    "other_religions",
-    "asian_latino_etc",
-    "disability_any",
-    "identity_any",
-    "num_identities",
-    "more_than_one_identity",
-    "na_gender",
-    "na_orientation",
-    "na_religion",
-    "na_race",
-    "na_disability",
-]

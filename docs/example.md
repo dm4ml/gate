@@ -107,3 +107,5 @@ If you want to cluster correlated columns, you can pass `cluster = True` into [`
 ## Real Dataset Example
 
 For an end-to-end example on a real weather dataset, see the [example notebook](https://www.github.com/dm4ml/gate/blob/main/examples/weather.ipynb) in the Github repository.
+
+For an example of using GATE with embeddings, see this [example notebook](https://www.github.com/dm4ml/gate/blob/main/examples/civilcomments.ipynb) in the Github repository.

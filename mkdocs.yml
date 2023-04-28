@@ -6,6 +6,7 @@ remote_branch: gh-pages
 nav:
   - Home: index.md
   - Example: example.md
+  - Embeddings: embedding.md
   - API Reference: api.md
   - How it Works: how-it-works.md
 

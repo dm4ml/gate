@@ -43,12 +43,13 @@ class Summary:
 
     @property
     def embeddings_summary(self) -> pd.DataFrame:
-        """Dataframe containing the embeddings summary statistics."""
+        """Dataframe containing the embeddings summary statistics if
+        there are embeddings, otherwise None."""
         return self._embeddings_summary
 
     @property
     def partition(self) -> str:
-        """Partition key value."""
+        """Partition value."""
         return self._partition
 
     @property

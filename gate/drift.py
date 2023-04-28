@@ -46,6 +46,9 @@ class DriftResult:
         most drifted from nearest neighbors in the embedding space
         in previous partitions.
 
+        Throws an error if the embedding_key_column isn't a valid
+        embedding key column, or if there are no embedding columns.
+
         Args:
             embedding_key_column (str):
                 Column that represents the embedding key (e.g., text, image).
@@ -54,8 +57,8 @@ class DriftResult:
             typing.Dict[str, pd.DataFrame]:
                 Dictionary with two keys: "drifted_examples" and
                 "corresponding_examples". The value of each key is a
-                dataframe with the partition_key, embedding_key_column,
-                and embedding_value_column.
+                dataframe with columns "partition_key", "embedding_key_column",
+                and "embedding_value_column".
         """
         all_centroids = np.vstack(
             [
@@ -98,7 +101,7 @@ class DriftResult:
     @property
     def score(self) -> float:
         """Distance from the partition to its k nearest neighbors."""
-        return self._all_scores.iloc[-1]
+        return self._all_scores[self.summary.partition]
 
     @property
     def is_drifted(self) -> bool:
@@ -119,7 +122,8 @@ class DriftResult:
     @property
     def all_scores(self) -> pd.Series:
         """Scores of all previous partitions."""
-        return self._all_scores.iloc[:-1]
+        mask = self._all_scores.index != self.summary.partition
+        return self._all_scores[mask]
 
     @property
     def clustering(self) -> typing.Dict[int, typing.List[str]]:
@@ -177,31 +181,11 @@ class DriftResult:
 
         # Return a dataframe with features with highest magnitude anomaly
         # scores
-
-        last_day = self._nn_features.iloc[-1]
+        last_day = self._nn_features.loc[self.summary.partition]
         sorted_cols = last_day.abs().sort_values(ascending=False).index
         sorted_df = last_day[sorted_cols].to_frame()
         sorted_df.rename(columns={sorted_df.columns[0]: "z-score"}, inplace=True)
         sorted_df = sorted_df.rename_axis(["column", "statistic"])
-
-        if len(self._embedding_columns) > 0 and average_embedding_columns:
-            # Average the z-scores
-            sorted_df.reset_index(inplace=True)
-            sorted_df["column"] = sorted_df["column"].apply(
-                lambda x: name_to_ec(x, self._embedding_columns)
-            )
-            sorted_df["z-score"] = sorted_df.apply(
-                lambda x: (
-                    abs(x["z-score"])
-                    if x["column"] in self._embedding_columns
-                    else x["z-score"]
-                ),
-                axis=1,
-            )
-            sorted_df = sorted_df.groupby(["column", "statistic"]).mean()
-            sorted_df = sorted_df.reindex(
-                sorted_df["z-score"].abs().sort_values(ascending=False).index
-            )
 
         if self._clustered_features is not None:
             # Join the clustered features with the sorted_df
@@ -224,6 +208,26 @@ class DriftResult:
                     .index
                 )
                 sorted_df.set_index(["column", "statistic"], inplace=True)
+
+        if len(self._embedding_columns) > 0 and average_embedding_columns:
+            # Average the z-scores
+            sorted_df.reset_index(inplace=True)
+            sorted_df["column"] = sorted_df["column"].apply(
+                lambda x: name_to_ec(x, self._embedding_columns)
+            )
+            sorted_df["z-score"] = sorted_df.apply(
+                lambda x: (
+                    abs(x["z-score"])
+                    if x["column"] in self._embedding_columns
+                    else x["z-score"]
+                ),
+                axis=1,
+            )
+            sorted_df = sorted_df.groupby(["column", "statistic"]).mean()
+            sorted_df = sorted_df.reindex(
+                sorted_df["z-score"].abs().sort_values(ascending=False).index
+            )
+
             # sorted_df.sort_values(by="z-score", ascending=False, inplace=True)
 
         return sorted_df
@@ -309,6 +313,8 @@ def name_to_ec(name: str, embedding_columns: typing.List[str]) -> str:
         str:
             Embedding column name.
     """
+    if type(name) != str:
+        print(name)
     split_name = name.rsplit("_", 1)[0]
     if split_name in embedding_columns:
         return split_name

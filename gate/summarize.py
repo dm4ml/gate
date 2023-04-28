@@ -11,7 +11,8 @@ from gate.summary import Summary
 def compute_embeddings(column: pd.Series, column_type: str) -> pd.Series:
     """Computes embeddings for a Series with the
     huggingface/transformers library. We use the
-    clip-ViT-B-32 model.
+    clip-ViT-B-32 model. This is an optional function;
+    we recommend you compute embeddings yourself.
 
     Args:
         column (pd.Series): Series to compute embeddings for.
