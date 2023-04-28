@@ -1704,9 +1704,10 @@ indexes):</p>
 <li>column: Name of the column</li>
 <li>statistic: Name of the statistic</li>
 <li>z-score: z-score of the column</li>
-<li>cluster: Cluster number of the column (if clustering was performed)</li>
-<li>z-score-cluster: z-score of the column in the cluster (if
-clustering was performed)</li>
+<li>cluster: Cluster number that the column belongs to (if clustering was
+performed)</li>
+<li>abs(z-score-cluster): absolute value of the average z-score of the
+column in the cluster (if clustering was performed)</li>
 </ul>
 <p>Use the <code>drifted_columns</code> method first, since <code>drifted_columns</code>
 deduplicates columns.</p>
@@ -1793,7 +1794,7 @@ index):</p>
 <li>statistic: Name of the statistic</li>
 <li>z-score: z-score of the column</li>
 <li>cluster: Cluster number of the column (if clustering was performed)</li>
-<li>z-score-cluster: z-score of the column in the cluster (if
+<li>abs(z-score-cluster): z-score of the column in the cluster (if
 clustering was performed)</li>
 </ul>
 
