@@ -540,7 +540,7 @@ def compute_clusters(
     for embedding_col_name in embedding_columns_with_indexes:
         column_names.remove(embedding_col_name)
 
-    model = SentenceTransformer("clip-ViT-B-32")
+    model = SentenceTransformer("sentence-transformers/clip-ViT-B-32")
     embeddings = model.encode(
         [f"{c} is of type {column_names_to_types[c]}" for c in column_names]
     )
